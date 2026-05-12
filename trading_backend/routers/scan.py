@@ -378,6 +378,28 @@ async def manual_scan(
     )
 
 
+# ── Push test ───────────────────────────────────────────────────────────────────
+
+@router.post("/test-push")
+async def test_push(
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Send a test push notification to all registered devices for this user."""
+    tokens = session.exec(select(DeviceToken).where(DeviceToken.user_id == user.id)).all()
+    if not tokens:
+        raise HTTPException(status_code=404, detail="No device tokens registered for this user.")
+    sent = send_to_user_devices(
+        [t.token for t in tokens],
+        title="Hey Jimmy — test notification",
+        body="Push pipeline confirmed working.",
+        alert_id="test-push",
+        ticker="TEST",
+        action_strength=None,
+    )
+    return {"tokens_found": len(tokens), "sent": sent}
+
+
 # ── Holding review ──────────────────────────────────────────────────────────────
 
 @router.post("/review-holding", response_model=ScanResponse)
