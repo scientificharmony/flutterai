@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/alert_model.dart';
+import '../services/device_service.dart';
 import 'alert_detail_screen.dart';
 
 class MissionScreen extends StatefulWidget {
@@ -36,7 +37,7 @@ class _MissionScreenState extends State<MissionScreen> {
         Uri.parse(ApiConfig.scanMarket),
         headers: {
           'Content-Type': 'application/json',
-          'device-id': 'demo-device-uuid',
+          'device-id': DeviceService.instance.deviceId,
         },
         body: jsonEncode({'mission': _missionController.text.trim()}),
       );
@@ -47,13 +48,18 @@ class _MissionScreenState extends State<MissionScreen> {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
         final status = data['status'] as String;
 
-        if (status == 'no_signal') {
-          setState(() => _errorMessage = data['message'] as String?);
+        if (status == 'no_signal' || status == 'no_action' || status == 'no_alert') {
+          setState(() => _errorMessage = data['message'] as String? ?? 'No actionable alert found.');
           return;
         }
 
-        final alert = TradeAlert.fromJson(
-            data['alert'] as Map<String, dynamic>);
+        final alertJson = data['alert'] as Map<String, dynamic>?;
+        if (alertJson == null) {
+          setState(() => _errorMessage = data['message'] as String? ?? 'No actionable alert found.');
+          return;
+        }
+
+        final alert = TradeAlert.fromJson(alertJson);
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(

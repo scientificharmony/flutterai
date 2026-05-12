@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import '../config/api_config.dart';
 import '../models/alert_model.dart';
+import '../services/device_service.dart';
 import 'alert_detail_screen.dart';
 import 'mission_screen.dart';
 import 'pie_builder_screen.dart';
@@ -36,7 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final res = await http.get(
         Uri.parse(ApiConfig.alerts),
-        headers: {'device-id': 'demo-device-uuid'},
+        headers: {'device-id': DeviceService.instance.deviceId},
       );
       if (res.statusCode == 200) {
         final list = jsonDecode(res.body) as List;

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import '../config/api_config.dart';
 import '../models/pie_model.dart';
+import '../services/device_service.dart';
 
 class PieResultScreen extends StatelessWidget {
   final PieBuildResult pie;
@@ -32,7 +33,7 @@ class PieResultScreen extends StatelessWidget {
         Uri.parse('${ApiConfig.baseUrl}/pie/save'),
         headers: {
           'Content-Type': 'application/json',
-          'device-id': 'demo-device-uuid',
+          'device-id': DeviceService.instance.deviceId,
         },
         body: jsonEncode({
           'pie': {

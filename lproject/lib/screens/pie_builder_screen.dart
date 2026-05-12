@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/pie_model.dart';
+import '../services/device_service.dart';
 import 'pie_result_screen.dart';
 
 const _goals = [
@@ -69,7 +70,7 @@ class _PieBuilderScreenState extends State<PieBuilderScreen> {
         Uri.parse('${ApiConfig.baseUrl}/pie/build'),
         headers: {
           'Content-Type': 'application/json',
-          'device-id': 'demo-device-uuid',
+          'device-id': DeviceService.instance.deviceId,
         },
         body: jsonEncode({
           'goal': _selectedGoal,

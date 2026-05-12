@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../config/api_config.dart';
 import '../models/alert_model.dart';
+import '../services/device_service.dart';
 
 class AlertDetailScreen extends StatefulWidget {
   final String alertId;
@@ -31,11 +32,11 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
     try {
       final alertFuture = http.get(
         Uri.parse('${ApiConfig.alerts}/${widget.alertId}'),
-        headers: {'device-id': 'demo-device-uuid'},
+        headers: {'device-id': DeviceService.instance.deviceId},
       );
       final outcomeFuture = http.get(
         Uri.parse('${ApiConfig.alerts}/${widget.alertId}/outcome'),
-        headers: {'device-id': 'demo-device-uuid'},
+        headers: {'device-id': DeviceService.instance.deviceId},
       );
       final results = await Future.wait([alertFuture, outcomeFuture]);
       if (!mounted) return;
@@ -103,7 +104,7 @@ Risk Note:        ${alert.riskNote}
         Uri.parse('${ApiConfig.alerts}/${widget.alertId}/outcome'),
         headers: {
           'Content-Type': 'application/json',
-          'device-id': 'demo-device-uuid',
+          'device-id': DeviceService.instance.deviceId,
         },
         body: jsonEncode(body),
       );
@@ -141,7 +142,7 @@ Risk Note:        ${alert.riskNote}
         Uri.parse('${ApiConfig.alerts}/${widget.alertId}/outcome/close'),
         headers: {
           'Content-Type': 'application/json',
-          'device-id': 'demo-device-uuid',
+          'device-id': DeviceService.instance.deviceId,
         },
         body: jsonEncode(result),
       );

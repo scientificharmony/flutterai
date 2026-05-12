@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/pie_model.dart';
+import '../services/device_service.dart';
 import 'pie_result_screen.dart';
 
 class PieHistoryScreen extends StatefulWidget {
@@ -31,7 +32,7 @@ class _PieHistoryScreenState extends State<PieHistoryScreen> {
     try {
       final res = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/pie/history'),
-        headers: {'device-id': 'demo-device-uuid'},
+        headers: {'device-id': DeviceService.instance.deviceId},
       );
       if (res.statusCode == 200) {
         final list = jsonDecode(res.body) as List;

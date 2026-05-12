@@ -3,6 +3,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
+import 'device_service.dart';
 
 // Top-level handler required by Firebase for background messages
 @pragma('vm:entry-point')
@@ -94,9 +95,9 @@ class FcmService {
         Uri.parse(ApiConfig.registerToken),
         headers: {
           'Content-Type': 'application/json',
-          'device-id': 'demo-device-uuid',
+          'device-id': DeviceService.instance.deviceId,
         },
-        body: jsonEncode({'token': token, 'platform': 'android'}),
+        body: jsonEncode({'token': token, 'platform': DeviceService.instance.platform}),
       );
     } catch (_) {
       // Non-fatal — will retry on next token refresh

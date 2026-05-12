@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/alert_model.dart';
+import '../services/device_service.dart';
 
 class PrivateDashboardScreen extends StatefulWidget {
   const PrivateDashboardScreen({super.key});
@@ -27,7 +28,7 @@ class _PrivateDashboardScreenState extends State<PrivateDashboardScreen> {
     try {
       final res = await http.get(
         Uri.parse(ApiConfig.performanceSummary),
-        headers: {'device-id': 'demo-device-uuid'},
+        headers: {'device-id': DeviceService.instance.deviceId},
       );
       if (!mounted) return;
       if (res.statusCode == 200) {

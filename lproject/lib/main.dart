@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'screens/alert_detail_screen.dart';
 import 'screens/home_screen.dart';
+import 'services/device_service.dart';
 import 'services/fcm_service.dart';
 
 class AppStartupConfig {
@@ -13,6 +14,7 @@ class AppStartupConfig {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await DeviceService.instance.init();
   if (AppStartupConfig.enableFirebase) {
     try {
       await Firebase.initializeApp();
