@@ -68,18 +68,22 @@ def test_mission_requests_lower_risk_returns_false(mission):
 # ── etf_category_for_ticker ───────────────────────────────────────────────────
 
 @pytest.mark.parametrize("ticker,expected_category", [
-    ("VUSA",  "broad_market"),
+    ("VUSAL", "broad_market"),
+    ("VUSAA", "broad_market"),
     ("VUAG",  "broad_market"),
     ("CSP1",  "broad_market"),
     ("VWRP",  "global_equity"),
     ("SWDA",  "global_equity"),
     ("IITU",  "technology"),
-    ("EQQQ",  "technology"),
+    ("IITUL", "technology"),
+    ("EQQQL", "technology"),
+    ("EQQQM", "technology"),
     ("CNDX",  "technology"),
     ("VHYLL", "income"),
     ("VHYLA", "income"),
-    ("INRG",  "clean_energy"),
-    ("vusa",  "broad_market"),   # lowercase normalised
+    ("INRGL", "clean_energy"),
+    ("INRGS", "clean_energy"),
+    ("vusal", "broad_market"),   # lowercase normalised
 ])
 def test_etf_category_for_ticker_known(ticker, expected_category):
     assert etf_category_for_ticker(ticker) == expected_category

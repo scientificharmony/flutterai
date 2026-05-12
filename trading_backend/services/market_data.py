@@ -13,15 +13,25 @@ _CACHE_TTL_SECONDS = 300  # 5 minutes
 # LSE-listed ETFs that Yahoo Finance requires a .L suffix for.
 # Keyed by the bare ticker used everywhere else in the app.
 _LSE_TICKERS: set[str] = {
-    "VUSA", "VUAG", "VWRP", "IITU", "EQQQ",
-    "INRG", "SWDA", "CSP1", "CNDX", "ISF", "VEVE",
+    "VUAG", "VWRP", "SWDA", "CSP1", "CNDX", "ISF", "VEVE",
 }
 
 # T212 tickers whose Yahoo Finance symbol differs from ticker + ".L".
+# T212 appends a share-class letter (L=LSE, A=accumulating, S=distributing)
+# to the base ticker, but Yahoo Finance uses the original base + ".L".
 # Takes priority over _LSE_TICKERS.
 _YF_OVERRIDES: dict[str, str] = {
-    "VHYLL": "VHYL.L",  # T212 VHYLL_EQ → Yahoo VHYL.L (LSE distributing)
-    "VHYLA": "VHYL.L",  # T212 VHYLA_EQ → same underlying fund on Yahoo
+    "VHYLL": "VHYL.L",   # T212 VHYLL_EQ → Yahoo VHYL.L
+    "VHYLA": "VHYL.L",   # T212 VHYLA_EQ → Yahoo VHYL.L
+    "VUSAL": "VUSA.L",   # T212 VUSAL_EQ  → Yahoo VUSA.L
+    "VUSAA": "VUSA.L",   # T212 VUSAA_EQ  → Yahoo VUSA.L
+    "VUSAS": "VUSA.L",   # T212 VUSAS_EQ  → Yahoo VUSA.L
+    "EQQQL": "EQQQ.L",   # T212 EQQQL_EQ  → Yahoo EQQQ.L
+    "EQQQM": "EQQQ.L",   # T212 EQQQM_EQ  → Yahoo EQQQ.L
+    "EQQQS": "EQQQ.L",   # T212 EQQQS_EQ  → Yahoo EQQQ.L
+    "INRGL": "INRG.L",   # T212 INRGL_EQ  → Yahoo INRG.L
+    "INRGS": "INRG.L",   # T212 INRGS_EQ  → Yahoo INRG.L
+    "IITUL": "IITU.L",   # T212 IITUL_EQ  → Yahoo IITU.L (if exists)
 }
 
 

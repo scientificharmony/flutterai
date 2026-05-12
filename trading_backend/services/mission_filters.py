@@ -29,17 +29,16 @@ _LOWER_RISK_KEYWORDS = [
 # Lightweight ETF category map for mission-aware ranking.
 # Used only for prioritisation — T212 validation is the authoritative gate.
 _ETF_CATEGORIES: dict[str, str] = {
-    "VUSA":  "broad_market",
+    "VUSAL": "broad_market", "VUSAA": "broad_market", "VUSAS": "broad_market",
     "VUAG":  "broad_market",
     "CSP1":  "broad_market",
     "VWRP":  "global_equity",
     "SWDA":  "global_equity",
-    "IITU":  "technology",
-    "EQQQ":  "technology",
+    "IITU":  "technology",   "IITUL": "technology",
+    "EQQQL": "technology",   "EQQQM": "technology",  "EQQQS": "technology",
     "CNDX":  "technology",
-    "VHYLL": "income",
-    "VHYLA": "income",
-    "INRG":  "clean_energy",
+    "VHYLL": "income",       "VHYLA": "income",
+    "INRGL": "clean_energy", "INRGS": "clean_energy",
 }
 
 
