@@ -1,0 +1,36 @@
+# This file is the authoritative exclusion list for both git and manual backups.
+# Generated/runtime files should never be committed or included in backup zips.
+
+# Secrets and local databases
+.env
+*.env
+.venv/
+venv/
+*.log
+uvicorn.log
+*.db
+*.sqlite
+*.sqlite3
+
+# Python / test caches
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Git repo metadata (never include in manual zip backups)
+.git/
+
+# macOS
+.DS_Store
+
+# Flutter / Dart
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+
+# IDE
+.vscode/
+.idea/
