@@ -217,7 +217,11 @@ async def manual_scan(
     formula_score = int(round(top.score))
     action = "WATCH"
     trading212_review_enabled = False
-    portfolio_fit_score = 50
+    # ETFs are inherently diversified — portfolio fit is higher by nature.
+    portfolio_fit_score = 70 if inst_type_map.get(top.ticker) == "ETF" else 50
+    # ETF action thresholds are slightly lower: stable instruments don't spike
+    # in formula score the way individual stocks do.
+    score_threshold = 65 if is_etf_mission else 70
     stale = _data_is_stale(top.ticker)
 
     if stale:
@@ -238,15 +242,15 @@ async def manual_scan(
     action_strength = calculate_buy_action_strength(formula_score, claude_confidence, portfolio_fit_score)
 
     if action != "DO_NOT_ACT":
-        if formula_score < 70:
+        if formula_score < score_threshold:
             action = "WATCH"
-            safety_flags.append("Formula score below 70.")
+            safety_flags.append(f"Formula score below {score_threshold}.")
         elif claude_confidence < 65:
             action = "WATCH"
             safety_flags.append("Claude confidence below 65.")
-        elif action_strength < 70:
+        elif action_strength < score_threshold:
             action = "WATCH"
-            safety_flags.append("Action Strength below 70.")
+            safety_flags.append(f"Action Strength below {score_threshold}.")
         else:
             action = "BUY_REVIEW"
             trading212_review_enabled = True
