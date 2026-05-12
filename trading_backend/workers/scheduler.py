@@ -15,6 +15,7 @@ from models.db_models import Strategy
 from workers.outcome_job import run_outcome_check
 from workers.scanner_job import run_strategy_scan
 from workers.pie_monitor_job import run_pie_monitoring
+from workers.holding_tracker_job import run_holding_tracker
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,13 @@ def _run_pie_monitoring() -> None:
         logger.error("Pie monitoring job failed: %s", exc)
 
 
+def _run_holding_tracker() -> None:
+    try:
+        asyncio.run(run_holding_tracker())
+    except Exception as exc:
+        logger.error("Holding tracker job failed: %s", exc)
+
+
 def start_scheduler() -> None:
     scheduler.add_job(
         _run_all_strategies,
@@ -64,8 +72,15 @@ def start_scheduler() -> None:
         replace_existing=True,
         max_instances=1,
     )
+    scheduler.add_job(
+        _run_holding_tracker,
+        trigger=IntervalTrigger(minutes=30),
+        id="holding_tracker",
+        replace_existing=True,
+        max_instances=1,
+    )
     scheduler.start()
-    logger.info("Scheduler started (market_scan=15m, outcome_check=1h, pie_monitor=4h).")
+    logger.info("Scheduler started (market_scan=15m, outcome_check=1h, pie_monitor=4h, holding_tracker=30m).")
 
 
 def stop_scheduler() -> None:

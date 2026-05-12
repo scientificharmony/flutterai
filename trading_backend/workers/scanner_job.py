@@ -30,6 +30,7 @@ from services.action_strength_engine import calculate_buy_action_strength
 from services.budget_service import can_call_claude, can_send_alert, record_claude_call, record_alert_sent
 from services.formula_engine import scan_watchlist
 from services.market_data import get_data_timestamp
+from services.mission_filters import mission_requests_etf, mission_requests_lower_risk
 from services.notification_service import send_to_user_devices
 
 logger = logging.getLogger(__name__)
@@ -94,6 +95,61 @@ def _data_is_stale(ticker: str) -> bool:
     return ts < (datetime.now(timezone.utc) - timedelta(days=3))
 
 
+def _is_actionable(action: str, trading212_review_enabled: bool, executable: bool) -> bool:
+    return action in ("BUY_REVIEW", "REVIEW_SELL") and trading212_review_enabled and executable
+
+
+def _suggested_amount_for(action: str, executable: bool, max_trade_amount: float) -> float:
+    if action != "BUY_REVIEW" or not executable:
+        return 0.0
+    return min(max_trade_amount, round(max_trade_amount * 0.7, 2))
+
+
+async def _pick_top_candidate(
+    candidates: list,
+    mission: str | None,
+) -> tuple[object | None, list[object], list[str], str]:
+    """
+    Pick the best actionable candidate respecting mission constraints.
+    Returns (candidate_or_None, validated_candidates, safety_flags, status_message).
+    """
+    safety_flags: list[str] = []
+    wants_etf = mission_requests_etf(mission)
+    wants_lower_risk = mission_requests_lower_risk(mission)
+
+    validated: list[dict] = []
+    for c in candidates:
+        try:
+            valid, inst_type = await trading212_service.validate_invest_instrument(c.ticker)
+        except Exception:
+            continue
+        if not valid:
+            safety_flags.append(f"{c.ticker} validation failed: {inst_type}.")
+            continue
+        if inst_type not in ("STOCK", "ETF"):
+            safety_flags.append(f"{c.ticker} rejected type: {inst_type}.")
+            continue
+        validated.append({"candidate": c, "type": inst_type})
+
+    if not validated:
+        return None, [], safety_flags, "No Trading 212 Invest validated candidates found."
+
+    if wants_etf:
+        etf_only = [v for v in validated if v["type"] == "ETF"]
+        if not etf_only:
+            return None, [], safety_flags + ["Explicit ETF mission: no valid ETF candidates available."], "No valid ETF candidates for this mission."
+        validated = etf_only
+
+    if wants_lower_risk and not wants_etf:
+        validated.sort(key=lambda v: (0 if v["type"] == "ETF" else 1, -v["candidate"].score))
+    else:
+        validated.sort(key=lambda v: -v["candidate"].score)
+
+    top = validated[0]["candidate"]
+    validated_candidates = [v["candidate"] for v in validated]
+    return top, validated_candidates, safety_flags, ""
+
+
 async def run_strategy_scan(strategy_id: str) -> None:
     """Full pipeline for a single strategy. Called by the scheduler."""
     with Session(engine) as session:
@@ -150,22 +206,15 @@ async def run_strategy_scan(strategy_id: str) -> None:
             return
 
         # Deduplicate and validate — Invest only (STOCK/ETF)
-        validated = []
+        non_duplicate: list[object] = []
         for c in candidates[:5]:
             if _recently_alerted(user.id, c.ticker, session):
                 continue
-            try:
-                valid_instrument, instrument_type = await trading212_service.validate_invest_instrument(c.ticker)
-            except Exception:
-                continue
-            if not valid_instrument or instrument_type not in ("STOCK", "ETF"):
-                continue
-            validated.append(c)
-            if len(validated) == 3:
-                break
+            non_duplicate.append(c)
 
-        if not validated:
-            logger.info("Strategy %s: no validated, non-duplicate candidates.", strategy_id)
+        top, validated_candidates, safety_flags, msg = await _pick_top_candidate(non_duplicate, mission=None)
+        if top is None:
+            logger.info("Strategy %s: %s", strategy_id, msg)
             strategy.last_scanned_at = datetime.now(timezone.utc)
             session.add(strategy)
             session.commit()
@@ -174,14 +223,14 @@ async def run_strategy_scan(strategy_id: str) -> None:
         # Claude analysis
         try:
             rec = await claude_service.analyse_candidates(
-                validated, user_balance, max_trade_amount, mission=None
+                [top] + [c for c in validated_candidates if c.ticker != top.ticker][:2],
+                user_balance, max_trade_amount, mission=None
             )
             record_claude_call(user.id, session)
         except ValueError as exc:
             logger.warning("Strategy %s: Claude validation failed: %s", strategy_id, exc)
             return
 
-        top = validated[0]
         formula_score = int(round(top.score))
         claude_confidence = rec.claude_confidence
         portfolio_fit_score = 50
@@ -190,10 +239,7 @@ async def run_strategy_scan(strategy_id: str) -> None:
         )
 
         action = "WATCH"
-        safety_flags: list[str] = []
         trading212_review_enabled = False
-        suggested_amount = min(max_trade_amount, round(max_trade_amount * 0.7, 2))
-
         stale = _data_is_stale(top.ticker)
         if stale:
             action = "DO_NOT_ACT"
@@ -206,20 +252,34 @@ async def run_strategy_scan(strategy_id: str) -> None:
             elif claude_confidence < strategy.min_confidence:
                 action = "WATCH"
                 safety_flags.append(f"Claude confidence below {strategy.min_confidence}.")
-            elif action_strength < 70:
+            elif action_strength < settings.MIN_PUSH_ACTION_STRENGTH:
                 action = "WATCH"
-                safety_flags.append("Action Strength below 70.")
-            elif suggested_amount > max_trade_amount:
-                action = "DO_NOT_ACT"
-                safety_flags.append("Suggested amount exceeds configured max risk percent.")
+                safety_flags.append(f"Action Strength below {settings.MIN_PUSH_ACTION_STRENGTH}.")
             else:
                 action = "BUY_REVIEW"
                 trading212_review_enabled = True
 
+        executable = trading212_review_enabled
+        suggested_amount = _suggested_amount_for(action, executable, max_trade_amount)
+
+        # Gate: only persist actionable alerts
+        if not _is_actionable(action, trading212_review_enabled, executable):
+            logger.info(
+                "SCHEDULED SCAN no-action | strategy=%s | ticker=%s | action=%s | reason=%s",
+                strategy_id, top.ticker, action, msg or "thresholds not met",
+            )
+            if not settings.is_private_test:
+                _increment_usage(user.id, session)
+            strategy.last_scanned_at = datetime.now(timezone.utc)
+            session.add(strategy)
+            session.commit()
+            return
+
+        # Actionable alert path
         action_label = label_for_action_strength(action_strength)
         score_interpretation = interpretation_for_score(action_strength)
-        alert_title = f"Potential Invest setup: {top.ticker}"
-        alert_body = f"Action Strength {action_strength}/100 — review in app."
+        alert_title = f"{top.ticker} looks like a good time to buy"
+        alert_body = f"Tap to see why — takes 30 seconds to review."
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=120)
 
         alert = TradeAlert(
@@ -241,12 +301,13 @@ async def run_strategy_scan(strategy_id: str) -> None:
             price_at_alert=top.current_price,
             alert_title=alert_title,
             alert_body=alert_body,
+            what_is_this=rec.what_is_this,
             rationale=rec.plain_english_summary,
-            risk_note="Manual review required before any trade.",
+            risk_note="Always review the chart yourself before buying. This app does not place trades.",
             key_factors=rec.key_factors,
             blocking_risks=rec.risks + rec.contradiction_notes,
             expires_at=expires_at,
-            executable=trading212_review_enabled,
+            executable=executable,
             safety_flags=safety_flags,
         )
         session.add(alert)
@@ -272,7 +333,7 @@ async def run_strategy_scan(strategy_id: str) -> None:
         session.refresh(alert)
 
         logger.info(
-            "SCHEDULED SCAN | strategy=%s | ticker=%s | score=%d | claude_conf=%d | action_strength=%d | action=%s",
+            "SCHEDULED SCAN alert_created | strategy=%s | ticker=%s | score=%d | claude_conf=%d | action_strength=%d | action=%s",
             strategy_id, top.ticker, formula_score, claude_confidence, action_strength, action,
         )
 

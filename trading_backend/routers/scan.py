@@ -275,8 +275,8 @@ async def manual_scan(
     # Actionable alert path
     action_label = label_for_action_strength(action_strength)
     score_interpretation = interpretation_for_score(action_strength)
-    alert_title = f"Potential Invest setup: {top.ticker}"
-    alert_body = f"Action Strength {action_strength}/100 — review in app."
+    alert_title = f"{top.ticker} looks like a good time to buy"
+    alert_body = "Tap to see why — takes 30 seconds to review."
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=120)
 
     alert = TradeAlert(
@@ -297,8 +297,9 @@ async def manual_scan(
         price_at_alert=top.current_price,
         alert_title=alert_title,
         alert_body=alert_body,
+        what_is_this=rec.what_is_this,
         rationale=rec.plain_english_summary,
-        risk_note="Manual review required before any trade.",
+        risk_note="Always review the chart yourself before buying. This app does not place trades.",
         key_factors=rec.key_factors,
         blocking_risks=rec.risks + rec.contradiction_notes,
         expires_at=expires_at,
@@ -370,6 +371,7 @@ async def manual_scan(
             trading212_review_enabled=alert.trading212_review_enabled,
             t212_ticker=_t212_ticker,
             t212_review_url=f"https://www.trading212.com/trading-instruments/invest/{_t212_ticker}" if _t212_ticker else None,
+            what_is_this=alert.what_is_this,
             suggested_amount=alert.suggested_amount,
             price_at_alert=alert.price_at_alert,
             alert_title=alert.alert_title,

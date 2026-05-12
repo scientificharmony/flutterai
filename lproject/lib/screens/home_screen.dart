@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import '../config/api_config.dart';
 import '../models/alert_model.dart';
 import '../services/device_service.dart';
+import '../theme/app_theme.dart';
 import 'alert_detail_screen.dart';
+import 'holdings_screen.dart';
 import 'mission_screen.dart';
 import 'pie_builder_screen.dart';
 import 'pie_history_screen.dart';
@@ -68,66 +71,120 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Flutter AI'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.analytics_outlined),
-            tooltip: 'Test Dashboard',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const PrivateDashboardScreen()),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.pie_chart_outline),
-            tooltip: 'Saved Pies',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const PieHistoryScreen()),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadAlerts,
-          ),
-        ],
-      ),
+      appBar: _buildAppBar(),
       body: _buildBody(),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
+      floatingActionButton: _buildFabs(),
+    );
+  }
+
+  AppBar _buildAppBar() {
+    return AppBar(
+      title: Row(
         children: [
-          FloatingActionButton.small(
-            heroTag: 'pie_fab',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const PieBuilderScreen()),
+          Container(
+            width: 8,
+            height: 8,
+            margin: const EdgeInsets.only(right: 10),
+            decoration: BoxDecoration(
+              color: AppColors.orange,
+              shape: BoxShape.circle,
+              boxShadow: [BoxShadow(color: AppColors.orange.withValues(alpha: 0.6), blurRadius: 8)],
             ),
-            tooltip: 'Build a Pie',
-            child: const Icon(Icons.pie_chart),
           ),
-          const SizedBox(height: 8),
-          FloatingActionButton.extended(
-            heroTag: 'scan_fab',
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const MissionScreen()),
-              );
-              _loadAlerts();
-            },
-            icon: const Icon(Icons.search),
-            label: const Text('Manual Scan'),
-          ),
+          Text('HEY JIMMY',
+              style: GoogleFonts.orbitron(
+                  color: AppColors.orange, fontWeight: FontWeight.w700, fontSize: 15)),
         ],
       ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.analytics_outlined, size: 20),
+          tooltip: 'Dashboard',
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const PrivateDashboardScreen()),
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.account_balance_wallet_outlined, size: 20),
+          tooltip: 'My Holdings',
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const HoldingsScreen()),
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.pie_chart_outline, size: 20),
+          tooltip: 'Saved Pies',
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const PieHistoryScreen()),
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.refresh, size: 20),
+          onPressed: _loadAlerts,
+        ),
+        const SizedBox(width: 4),
+      ],
+    );
+  }
+
+  Widget _buildFabs() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        FloatingActionButton.small(
+          heroTag: 'pie_fab',
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const PieBuilderScreen()),
+          ),
+          tooltip: 'Build a Pie',
+          backgroundColor: AppColors.surface,
+          foregroundColor: AppColors.cyan,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: AppColors.cyan, width: 1),
+          ),
+          child: const Icon(Icons.pie_chart_outline, size: 18),
+        ),
+        const SizedBox(height: 10),
+        FloatingActionButton.extended(
+          heroTag: 'scan_fab',
+          onPressed: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const MissionScreen()),
+            );
+            _loadAlerts();
+          },
+          icon: const Icon(Icons.search, size: 18),
+          label: Text('Scan Market',
+              style: GoogleFonts.dmSans(fontWeight: FontWeight.w600)),
+          backgroundColor: AppColors.orange,
+          foregroundColor: Colors.black,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          elevation: 6,
+        ),
+      ],
     );
   }
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: AppColors.orange),
+            const SizedBox(height: 16),
+            Text('Scanning markets…',
+                style: GoogleFonts.dmSans(color: AppColors.textMuted)),
+          ],
+        ),
+      );
     }
     if (_error != null) {
       return Center(
@@ -136,31 +193,49 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.error_outline, size: 48, color: Colors.red[400]),
+              const Icon(Icons.error_outline, size: 48, color: AppColors.pink),
               const SizedBox(height: 12),
-              Text(_error!, textAlign: TextAlign.center),
+              Text(_error!,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.dmSans(color: AppColors.textMuted)),
               const SizedBox(height: 16),
-              ElevatedButton(onPressed: _loadAlerts, child: const Text('Retry')),
+              OutlinedButton(onPressed: _loadAlerts, child: const Text('Retry')),
             ],
           ),
         ),
       );
     }
     if (_alerts.isEmpty) {
-      return const Center(
-        child: Text(
-          'No alerts yet.\nTap "Manual Scan" to generate your first alert.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.grey),
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.radar,
+                  size: 64,
+                  color: AppColors.orange.withValues(alpha: 0.3)),
+              const SizedBox(height: 20),
+              Text('No signals yet.',
+                  style: GoogleFonts.orbitron(
+                      color: AppColors.textMuted, fontSize: 14)),
+              const SizedBox(height: 8),
+              Text('Tap Scan Market to run your first analysis.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.dmSans(color: AppColors.textMuted, fontSize: 13)),
+            ],
+          ),
         ),
       );
     }
     return RefreshIndicator(
+      color: AppColors.orange,
+      backgroundColor: AppColors.surface,
       onRefresh: _loadAlerts,
       child: ListView.separated(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 100),
         itemCount: _alerts.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        separatorBuilder: (_, __) => const SizedBox(height: 10),
         itemBuilder: (_, i) => _AlertTile(
           alert: _alerts[i],
           onTap: () => _openAlert(_alerts[i]),
@@ -169,6 +244,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+
+// ── Alert tile ────────────────────────────────────────────────────────────────
 
 class _AlertTile extends StatelessWidget {
   final TradeAlert alert;
@@ -179,84 +256,149 @@ class _AlertTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final expired = alert.isExpired;
-    final color = alert.executable && !expired ? Colors.green : Colors.grey;
+    final actionColor = _actionColor(alert.action, expired);
+    final statusIcon = _statusIcon(alert, expired);
 
-    return Card(
-      child: ListTile(
-        onTap: onTap,
-        leading: CircleAvatar(
-          backgroundColor: color.withValues(alpha: 0.15),
-          child: Text(
-            alert.action[0],
-            style: TextStyle(
-                fontWeight: FontWeight.bold, color: color, fontSize: 18),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: expired ? AppColors.border : actionColor.withValues(alpha: 0.25),
           ),
         ),
-        title: Row(
-          children: [
-            Text(alert.ticker,
-                style: const TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(width: 8),
-            _ActionChip(action: alert.action),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              // Left accent bar
+              Container(
+                width: 3,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: expired ? AppColors.inactive : actionColor,
+                  borderRadius: BorderRadius.circular(2),
+                  boxShadow: expired
+                      ? null
+                      : [BoxShadow(color: actionColor.withValues(alpha: 0.5), blurRadius: 6)],
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Ticker + info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          alert.ticker,
+                          style: GoogleFonts.orbitron(
+                            color: expired ? AppColors.textMuted : AppColors.textPrimary,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _ActionBadge(action: alert.action, expired: expired),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      alert.alertBody,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.dmSans(
+                          fontSize: 12, color: AppColors.textMuted),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${DateFormat('dd MMM HH:mm').format(alert.createdAt.toLocal())}  ·  AS ${alert.actionStrength}/100',
+                      style: GoogleFonts.dmSans(
+                          fontSize: 11,
+                          color: AppColors.textMuted.withValues(alpha: 0.7)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              statusIcon,
+            ],
+          ),
         ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(alert.alertBody,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12)),
-            const SizedBox(height: 2),
-            Text(
-              '${DateFormat('dd MMM HH:mm').format(alert.createdAt.toLocal())}  '
-              '· Action Strength ${alert.actionStrength}/100  '
-              '· ${alert.actionLabel}',
-              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-            ),
-          ],
-        ),
-        trailing: expired
-            ? const Icon(Icons.timer_off, color: Colors.grey, size: 18)
-            : alert.executable
-                ? const Icon(Icons.check_circle, color: Colors.green, size: 18)
-                : const Icon(Icons.block, color: Colors.orange, size: 18),
       ),
     );
   }
+
+  Color _actionColor(String action, bool expired) {
+    if (expired) return AppColors.inactive;
+    switch (action) {
+      case 'BUY_REVIEW':
+        return AppColors.green;
+      case 'REVIEW_SELL':
+        return AppColors.pink;
+      case 'WATCH':
+        return AppColors.orange;
+      default:
+        return AppColors.inactive;
+    }
+  }
+
+  Widget _statusIcon(TradeAlert alert, bool expired) {
+    if (expired) {
+      return const Icon(Icons.timer_off_outlined, color: AppColors.inactive, size: 18);
+    }
+    if (alert.executable) {
+      return Icon(Icons.check_circle_outline, color: AppColors.green, size: 18);
+    }
+    return Icon(Icons.remove_circle_outline, color: AppColors.orange, size: 18);
+  }
 }
 
-class _ActionChip extends StatelessWidget {
+// ── Action badge ──────────────────────────────────────────────────────────────
+
+class _ActionBadge extends StatelessWidget {
   final String action;
-  const _ActionChip({required this.action});
+  final bool expired;
+  const _ActionBadge({required this.action, required this.expired});
 
   @override
   Widget build(BuildContext context) {
-    Color bg;
-    Color fg;
+    Color color;
+    String label;
     switch (action) {
       case 'BUY_REVIEW':
-        bg = Colors.green[100]!;
-        fg = Colors.green[800]!;
+        color = AppColors.green;
+        label = 'BUY';
       case 'REVIEW_SELL':
-        bg = Colors.red[100]!;
-        fg = Colors.red[800]!;
+        color = AppColors.pink;
+        label = 'SELL';
       case 'WATCH':
-        bg = Colors.orange[100]!;
-        fg = Colors.orange[800]!;
+        color = AppColors.orange;
+        label = 'WATCH';
       case 'DO_NOT_ACT':
-        bg = Colors.grey[300]!;
-        fg = Colors.grey[800]!;
+        color = AppColors.inactive;
+        label = 'HOLD';
       default:
-        bg = Colors.grey[200]!;
-        fg = Colors.grey[700]!;
+        color = AppColors.inactive;
+        label = action;
     }
+    if (expired) color = AppColors.inactive;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration:
-          BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
-      child: Text(action,
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: fg)),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.dmSans(
+            fontSize: 10, fontWeight: FontWeight.w700, color: color),
+      ),
     );
   }
 }

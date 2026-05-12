@@ -16,6 +16,8 @@ class TradeAlert {
   final String actionStrengthDisclaimer;
   final bool trading212ReviewEnabled;
   final String? t212ReviewUrl;
+  final String whatIsThis;
+  final String? sellTrigger; // profit_target | stop_loss | overbought | stale
   final double suggestedAmount;
   final double priceAtAlert;
   final String alertTitle;
@@ -47,6 +49,8 @@ class TradeAlert {
     required this.actionStrengthDisclaimer,
     required this.trading212ReviewEnabled,
     this.t212ReviewUrl,
+    this.whatIsThis = '',
+    this.sellTrigger,
     required this.suggestedAmount,
     required this.priceAtAlert,
     required this.alertTitle,
@@ -80,6 +84,8 @@ class TradeAlert {
       actionStrengthDisclaimer: (json['action_strength_disclaimer'] as String?) ?? '',
       trading212ReviewEnabled: (json['trading212_review_enabled'] as bool?) ?? false,
       t212ReviewUrl: json['t212_review_url'] as String?,
+      whatIsThis: (json['what_is_this'] as String?) ?? '',
+      sellTrigger: json['sell_trigger'] as String?,
       suggestedAmount: (json['suggested_amount'] as num).toDouble(),
       priceAtAlert: (json['price_at_alert'] as num).toDouble(),
       alertTitle: json['alert_title'] as String,

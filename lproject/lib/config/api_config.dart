@@ -17,6 +17,7 @@ class ApiConfig {
 
   static final String scanMarket            = "$baseUrl/scan";
   static final String alerts                = "$baseUrl/alerts";
+  static final String holdings              = "$baseUrl/holdings";
   static final String registerToken         = "$baseUrl/notifications/register-token";
   static final String health                = "$baseUrl/health";
   static final String performanceSummary    = "$baseUrl/test/performance-summary";

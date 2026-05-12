@@ -5,7 +5,8 @@ from sqlmodel import Session, select
 
 from auth import get_current_user
 from database import get_session
-from models.db_models import User, TradeAlert, SignalPerformance
+import uuid
+from models.db_models import User, TradeAlert, SignalPerformance, OpenPosition
 from models.schemas import (
     TradeAlertResponse,
     RecordOutcomeRequest,
@@ -34,6 +35,8 @@ def _to_response(alert: TradeAlert) -> TradeAlertResponse:
         score_interpretation=alert.score_interpretation,
         action_strength_disclaimer=alert.action_strength_disclaimer,
         trading212_review_enabled=alert.trading212_review_enabled,
+        what_is_this=alert.what_is_this,
+        sell_trigger=alert.sell_trigger,
         suggested_amount=alert.suggested_amount,
         price_at_alert=alert.price_at_alert,
         alert_title=alert.alert_title,
@@ -156,6 +159,25 @@ def record_outcome(
     session.add(perf)
     session.commit()
     session.refresh(perf)
+
+    # Auto-create an OpenPosition when the user confirms they took the trade
+    if body.outcome == "took_trade":
+        existing_pos = session.exec(
+            select(OpenPosition).where(OpenPosition.signal_perf_id == perf.id)
+        ).first()
+        if not existing_pos:
+            entry = body.manual_entry_price or alert.price_at_alert
+            amount = body.manual_amount or alert.suggested_amount
+            session.add(OpenPosition(
+                id=str(uuid.uuid4()),
+                user_id=user.id,
+                signal_perf_id=perf.id,
+                ticker=alert.ticker,
+                entry_price=entry,
+                amount=amount,
+            ))
+            session.commit()
+
     return _perf_to_response(perf)
 
 

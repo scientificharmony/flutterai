@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     max_risk_pct: float = 10.0
     quiet_hours_start: int = 22
     quiet_hours_end: int = 8
+    min_push_action_strength: int = 75
+    sell_target_pct: float = 8.0
+    stop_loss_pct: float = 5.0
+    stale_position_days: int = 14
 
     @property
     def is_private_test(self) -> bool:
@@ -84,6 +88,8 @@ class Settings(BaseSettings):
     def PRO_SCANS_PER_DAY(self) -> int: return self.pro_scans_per_day
     @property
     def MAX_RISK_PCT(self) -> float: return self.max_risk_pct
+    @property
+    def MIN_PUSH_ACTION_STRENGTH(self) -> int: return self.min_push_action_strength
 
 
 settings = Settings()

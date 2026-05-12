@@ -55,6 +55,7 @@ class ClaudeRecommendation(BaseModel):
     risks: list[str]
     contradiction_notes: list[str] = Field(default_factory=list)
     plain_english_summary: str
+    what_is_this: str = ""
 
 ClaudeRecommendationAnalysis = ClaudeRecommendation
 
@@ -89,8 +90,10 @@ class TradeAlertResponse(BaseModel):
     score_interpretation: str
     action_strength_disclaimer: str = ACTION_STRENGTH_DISCLAIMER
     trading212_review_enabled: bool
-    t212_ticker: Optional[str] = None  # full T212 canonical ticker e.g. VHYLL_EQ
-    t212_review_url: Optional[str] = None  # direct URL to instrument in T212
+    t212_ticker: Optional[str] = None
+    t212_review_url: Optional[str] = None
+    what_is_this: str = ""
+    sell_trigger: Optional[str] = None
     suggested_amount: float
     price_at_alert: float
     alert_title: str

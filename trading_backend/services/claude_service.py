@@ -15,28 +15,29 @@ _FORBIDDEN_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
-_SYSTEM_PROMPT = """You are a conservative financial risk analyst for beginner investors.
+_SYSTEM_PROMPT = """You are a conservative financial assistant helping beginner investors review opportunities.
 
-You will receive a list of pre-screened Trading 212 Invest candidates (stocks and/or ETFs) that have passed T212 validation.
-Explain the single best candidate in plain language.
+You will receive pre-screened Trading 212 Invest candidates (stocks and/or ETFs).
+Write for someone with NO prior investing experience. Use plain, simple English.
 
 STRICT RULES:
 - Select a ticker from the candidates list only.
-- Do not calculate final Action Strength.
+- Do not calculate Action Strength.
 - Do not output probabilities of success.
-- Do not use guaranteed language, or "buy now"/"sell now".
-- If the mission requests ETFs, focus your explanation on the ETF as a diversified fund, not as a stock pick.
-- Return JSON only.
+- Do not use "guaranteed", "buy now", "sell now", "definitely", or "risk-free".
+- For ETFs: explain as a diversified fund, not a single stock pick.
+- Return JSON only — no extra text.
 
 Output schema:
 {
-  "ticker": "AAPL",
+  "ticker": "VHYLL",
   "claude_confidence": 78,
   "reasoning_quality": 75,
-  "key_factors": ["Factor one", "Factor two"],
-  "risks": ["Risk one", "Risk two"],
-  "contradiction_notes": ["Optional contradiction"],
-  "plain_english_summary": "Clear summary for manual review."
+  "what_is_this": "One sentence: what this instrument IS, in plain English. E.g. 'VHYLL is a fund that holds hundreds of dividend-paying companies from around the world — it spreads risk and pays regular income.'",
+  "plain_english_summary": "2-3 sentences explaining WHY this setup looks interesting right now, written for a beginner. No jargon. E.g. 'The price has been moving steadily upward and trading volume is healthy. The trend looks positive and there are no obvious warning signs at this moment.'",
+  "key_factors": ["Short plain-English reason 1", "Short plain-English reason 2"],
+  "risks": ["Plain-English risk 1", "Plain-English risk 2"],
+  "contradiction_notes": []
 }"""
 
 
@@ -83,14 +84,19 @@ def _strip_fences(text: str) -> str:
 
 
 def _fallback(candidates: list[ScoredCandidate]) -> ClaudeRecommendation:
+    ticker = candidates[0].ticker.upper()
     return ClaudeRecommendation(
-        ticker=candidates[0].ticker.upper(),
+        ticker=ticker,
         claude_confidence=50,
         reasoning_quality=50,
-        key_factors=["Validated candidate passed deterministic screening."],
-        risks=["Market movement can invalidate setups quickly."],
+        what_is_this=f"{ticker} is a Trading 212 Invest instrument that passed automated screening.",
+        key_factors=["Passed automated technical screening."],
+        risks=["Market conditions can change quickly — always review before acting."],
         contradiction_notes=[],
-        plain_english_summary="Validated candidate identified for manual review.",
+        plain_english_summary=(
+            f"{ticker} was flagged by the formula scan. "
+            "Review the chart in Trading 212 before deciding anything."
+        ),
     )
 
 
@@ -110,7 +116,7 @@ async def analyse_candidates(
     try:
         response = _client.messages.create(
             model=settings.CLAUDE_MODEL,
-            max_tokens=600,
+            max_tokens=800,
             system=_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_message}],
         )
@@ -124,11 +130,16 @@ async def analyse_candidates(
 
     summary = rec.plain_english_summary
     if _contains_forbidden(summary):
-        summary = "Validated candidate identified for manual review."
+        summary = f"{rec.ticker.upper()} was flagged by the formula scan. Review the chart before deciding anything."
+
+    what_is_this = rec.what_is_this
+    if _contains_forbidden(what_is_this):
+        what_is_this = ""
 
     return rec.model_copy(
         update={
             "ticker": rec.ticker.upper(),
+            "what_is_this": what_is_this,
             "key_factors": _clean_texts(rec.key_factors),
             "risks": _clean_texts(rec.risks),
             "contradiction_notes": _clean_texts(rec.contradiction_notes),

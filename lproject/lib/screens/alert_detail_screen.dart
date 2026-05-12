@@ -227,7 +227,7 @@ Risk Note:        ${alert.riskNote}
 
 // ── Main detail view ──────────────────────────────────────────────────────────
 
-class _AlertDetail extends StatelessWidget {
+class _AlertDetail extends StatefulWidget {
   final TradeAlert alert;
   final SignalOutcome? outcome;
   final VoidCallback onOpenT212;
@@ -249,62 +249,109 @@ class _AlertDetail extends StatelessWidget {
   });
 
   @override
+  State<_AlertDetail> createState() => _AlertDetailState();
+}
+
+class _AlertDetailState extends State<_AlertDetail> {
+  bool _showAdvanced = false;
+
+  @override
   Widget build(BuildContext context) {
+    final alert = widget.alert;
+    final outcome = widget.outcome;
     final expired = alert.isExpired;
+    final isBuy = alert.action == 'BUY_REVIEW';
+    final isSell = alert.action == 'REVIEW_SELL';
     final canExecute = alert.trading212ReviewEnabled &&
         alert.actionStrength >= 70 &&
-        (alert.action == 'BUY_REVIEW' || alert.action == 'REVIEW_SELL') &&
+        (isBuy || isSell) &&
         !expired;
-    final confidenceColor = alert.confidence >= 70 ? Colors.green : Colors.orange;
+
+    final strengthColor = alert.actionStrength >= 80
+        ? Colors.green
+        : alert.actionStrength >= 70
+            ? Colors.orange
+            : Colors.grey;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Header card
+          // ── Hero header ──────────────────────────────────────────────────
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(alert.ticker,
-                          style: const TextStyle(
-                              fontSize: 32, fontWeight: FontWeight.bold)),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(alert.ticker,
+                              style: const TextStyle(
+                                  fontSize: 36, fontWeight: FontWeight.bold)),
+                          if (expired)
+                            const Text('Expired',
+                                style: TextStyle(color: Colors.red, fontSize: 12))
+                          else
+                            Text(
+                              'Valid until ${DateFormat('HH:mm').format(alert.expiresAt.toLocal())}',
+                              style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                            ),
+                        ],
+                      ),
                       _ActionBadge(action: alert.action),
                     ],
                   ),
-                  const SizedBox(height: 16),
+
+                  const SizedBox(height: 20),
+
+                  // Confidence bar
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _Stat(label: "Suggested", value: "£${alert.suggestedAmount.toStringAsFixed(2)}"),
-                      _Stat(label: "Price at Alert", value: "£${alert.priceAtAlert.toStringAsFixed(4)}"),
-                      _Stat(label: "Formula Score", value: "${alert.formulaScore}/100"),
-                      _Stat(
-                          label: "Claude Confidence",
-                          value: "${alert.claudeConfidence}/100",
-                          valueColor: confidenceColor),
+                      const Text('Signal strength',
+                          style: TextStyle(fontSize: 13, color: Colors.grey)),
+                      const Spacer(),
+                      Text('${alert.actionStrength}/100',
+                          style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: strengthColor)),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: alert.actionStrength / 100,
+                      minHeight: 10,
+                      backgroundColor: Colors.grey[200],
+                      valueColor: AlwaysStoppedAnimation<Color>(strengthColor),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(alert.actionLabel,
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: strengthColor,
+                          fontWeight: FontWeight.w600)),
+
+                  const SizedBox(height: 16),
+
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _Stat(
-                          label: "Action Strength",
-                          value: "${alert.actionStrength}/100"),
-                      _Stat(label: "Action Label", value: alert.actionLabel),
-                      _Stat(
-                          label: "Expires",
-                          value: expired
-                              ? "Expired"
-                              : DateFormat('HH:mm').format(alert.expiresAt.toLocal()),
-                          valueColor: expired ? Colors.red : null),
+                      _StatPill(
+                          label: 'Price',
+                          value: '£${alert.priceAtAlert.toStringAsFixed(2)}'),
+                      const SizedBox(width: 8),
+                      _StatPill(
+                          label: 'Suggested',
+                          value: '£${alert.suggestedAmount.toStringAsFixed(0)}'),
                     ],
                   ),
                 ],
@@ -314,38 +361,127 @@ class _AlertDetail extends StatelessWidget {
 
           const SizedBox(height: 12),
 
-          // Rationale
-          _Section(title: "Rationale", body: alert.rationale),
+          // ── What is this? ────────────────────────────────────────────────
+          if (alert.whatIsThis.isNotEmpty)
+            _InfoCard(
+              icon: Icons.info_outline,
+              color: Colors.blue,
+              title: 'What is ${alert.ticker}?',
+              body: alert.whatIsThis,
+            ),
+
+          if (alert.whatIsThis.isNotEmpty) const SizedBox(height: 8),
+
+          // ── Why now? ─────────────────────────────────────────────────────
+          _InfoCard(
+            icon: Icons.insights,
+            color: Colors.green,
+            title: 'Why now?',
+            body: alert.rationale,
+          ),
+
           const SizedBox(height: 8),
-          _Section(title: "Risk Note", body: alert.riskNote),
 
+          // ── Step-by-step (buy alerts only) ───────────────────────────────
+          if (canExecute && isBuy) ...[
+            _StepsCard(ticker: alert.ticker, amount: alert.suggestedAmount),
+            const SizedBox(height: 8),
+          ],
+
+          // ── Step-by-step (sell alerts) ───────────────────────────────────
+          if (canExecute && isSell) ...[
+            _SellStepsCard(ticker: alert.ticker),
+            const SizedBox(height: 8),
+          ],
+
+          // ── Key factors ──────────────────────────────────────────────────
           if (alert.keyFactors.isNotEmpty) ...[
+            _BulletSection(
+                title: 'What looks good',
+                items: alert.keyFactors,
+                color: Colors.green),
             const SizedBox(height: 8),
-            _BulletSection(title: "Key Factors", items: alert.keyFactors, color: Colors.blue),
           ],
 
+          // ── Risks ────────────────────────────────────────────────────────
           if (alert.blockingRisks.isNotEmpty) ...[
+            _BulletSection(
+                title: 'Things to be aware of',
+                items: alert.blockingRisks,
+                color: Colors.orange),
             const SizedBox(height: 8),
-            _BulletSection(title: "Blocking Risks", items: alert.blockingRisks, color: Colors.red),
           ],
 
-          // Safety flags
-          if (alert.safetyFlags.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            ...alert.safetyFlags.map(
-              (f) => Container(
-                margin: const EdgeInsets.only(bottom: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.orange[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange[300]!),
+          // ── Risk note ────────────────────────────────────────────────────
+          _InfoCard(
+            icon: Icons.shield_outlined,
+            color: Colors.orange,
+            title: 'Important',
+            body: alert.riskNote,
+          ),
+
+          const SizedBox(height: 8),
+
+          // ── Advanced toggle ──────────────────────────────────────────────
+          GestureDetector(
+            onTap: () => setState(() => _showAdvanced = !_showAdvanced),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  _showAdvanced ? 'Hide technical details' : 'Show technical details',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                 ),
-                child: Row(
+                Icon(
+                  _showAdvanced ? Icons.expand_less : Icons.expand_more,
+                  size: 16,
+                  color: Colors.grey[500],
+                ),
+              ],
+            ),
+          ),
+
+          if (_showAdvanced) ...[
+            const SizedBox(height: 8),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.warning_amber, color: Colors.orange, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(f, style: const TextStyle(fontSize: 13))),
+                    const Text('Technical Details',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, color: Colors.grey)),
+                    const SizedBox(height: 10),
+                    _AdvancedRow('Formula Score', '${alert.formulaScore}/100'),
+                    _AdvancedRow('Claude Confidence', '${alert.claudeConfidence}/100'),
+                    if (alert.portfolioFitScore != null)
+                      _AdvancedRow('Portfolio Fit', '${alert.portfolioFitScore}/100'),
+                    _AdvancedRow('Action Strength', '${alert.actionStrength}/100'),
+                    _AdvancedRow('Signal Score', alert.signalScore.toStringAsFixed(1)),
+                    if (alert.safetyFlags.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      ...alert.safetyFlags.map(
+                        (f) => Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.warning_amber,
+                                  color: Colors.orange, size: 14),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                  child: Text(f,
+                                      style: const TextStyle(fontSize: 12))),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Text(
+                      alert.actionStrengthDisclaimer,
+                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
                   ],
                 ),
               ),
@@ -354,66 +490,44 @@ class _AlertDetail extends StatelessWidget {
 
           const SizedBox(height: 16),
 
-          // Outcome card
+          // ── Outcome card ─────────────────────────────────────────────────
           _OutcomeCard(
             outcome: outcome,
-            onTookTrade: onTookTrade,
-            onIgnored: onIgnored,
-            onWatching: onWatching,
-            onCloseTrade: onCloseTrade,
+            onTookTrade: widget.onTookTrade,
+            onIgnored: widget.onIgnored,
+            onWatching: widget.onWatching,
+            onCloseTrade: widget.onCloseTrade,
           ),
 
           const SizedBox(height: 16),
 
-          // Price tracking (if available)
           if (outcome != null &&
-              (outcome!.price1h != null || outcome!.price1d != null)) ...[
-            _PriceTrackingCard(outcome: outcome!, priceAtAlert: alert.priceAtAlert),
+              (outcome.price1h != null || outcome.price1d != null)) ...[
+            _PriceTrackingCard(
+                outcome: outcome, priceAtAlert: alert.priceAtAlert),
             const SizedBox(height: 16),
           ],
 
-          // Disclaimer
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.grey[300]!),
-            ),
-              child: const Text(
-              'This app does not place trades. You are responsible for all trading decisions. Past performance is not indicative of future results.',
-              style: TextStyle(fontSize: 11, color: Colors.grey),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Tooltip(
-            message: 'Action Strength ranks how strongly this setup matches your rules. It is not a guarantee or probability of profit.',
-            child: Text(
-              alert.actionStrengthDisclaimer,
-              style: TextStyle(fontSize: 11, color: Colors.grey[700]),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
+          // ── Action buttons ───────────────────────────────────────────────
           OutlinedButton.icon(
-            onPressed: onCopy,
-            icon: const Icon(Icons.copy),
-            label: const Text('Copy Order Details'),
+            onPressed: widget.onCopy,
+            icon: const Icon(Icons.copy, size: 16),
+            label: const Text('Copy details'),
           ),
 
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
 
           ElevatedButton.icon(
-            onPressed: canExecute ? onOpenT212 : null,
-            icon: const Icon(Icons.open_in_new),
-            label: const Text('Review in Trading 212'),
+            onPressed: canExecute ? widget.onOpenT212 : null,
+            icon: Icon(isSell ? Icons.trending_down : Icons.open_in_new),
+            label: Text(isSell ? 'Review Sell in Trading 212' : 'Open in Trading 212 to Buy'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
+              backgroundColor: isSell ? Colors.red : Colors.green,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(vertical: 16),
               disabledBackgroundColor: Colors.grey[300],
+              textStyle: const TextStyle(
+                  fontSize: 16, fontWeight: FontWeight.bold),
             ),
           ),
 
@@ -424,14 +538,19 @@ class _AlertDetail extends StatelessWidget {
                 expired
                     ? 'This alert has expired.'
                     : alert.action == 'WATCH'
-                        ? 'Watch only — not strong enough to review yet.'
-                        : alert.safetyFlags.any((f) => f.toLowerCase().contains('validation'))
-                            ? 'Review disabled — Trading 212 validation failed.'
-                            : 'Review disabled — safety checks did not pass.',
+                        ? 'Not strong enough to act on yet — watch for now.'
+                        : 'Not available — safety checks did not pass.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                style: TextStyle(color: Colors.grey[500], fontSize: 12),
               ),
             ),
+
+          const SizedBox(height: 8),
+          const Text(
+            'This app does not place trades. You are responsible for all decisions.',
+            style: TextStyle(fontSize: 11, color: Colors.grey),
+            textAlign: TextAlign.center,
+          ),
 
           const SizedBox(height: 24),
         ],
@@ -834,6 +953,236 @@ class _CloseTradeDialogState extends State<_CloseTradeDialog> {
           child: const Text('Close Trade'),
         ),
       ],
+    );
+  }
+}
+
+// ── New helper widgets ────────────────────────────────────────────────────────
+
+class _InfoCard extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String body;
+  const _InfoCard({required this.icon, required this.color, required this.title, required this.body});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: color,
+                          fontSize: 13)),
+                  const SizedBox(height: 4),
+                  Text(body, style: const TextStyle(fontSize: 14, height: 1.4)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatPill extends StatelessWidget {
+  final String label;
+  final String value;
+  const _StatPill({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: RichText(
+        text: TextSpan(
+          style: DefaultTextStyle.of(context).style,
+          children: [
+            TextSpan(text: '$label  ', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+            TextSpan(text: value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StepsCard extends StatelessWidget {
+  final String ticker;
+  final double amount;
+  const _StepsCard({required this.ticker, required this.amount});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: Colors.green[50],
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.checklist, color: Colors.green, size: 18),
+                SizedBox(width: 6),
+                Text('How to act on this',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green,
+                        fontSize: 13)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            _Step('1', 'Tap the green button below to open Trading 212'),
+            _Step('2', 'Search for "$ticker" in Trading 212'),
+            _Step('3', 'Look at the chart — does the price look reasonable to you?'),
+            _Step('4', 'If yes, tap Buy and enter up to £${amount.toStringAsFixed(0)}'),
+            _Step('5', 'Come back here and tap "I took this trade" so we can track it'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SellStepsCard extends StatelessWidget {
+  final String ticker;
+  const _SellStepsCard({required this.ticker});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: Colors.red[50],
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.checklist, color: Colors.red, size: 18),
+                SizedBox(width: 6),
+                Text('How to act on this',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red,
+                        fontSize: 13)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            _SellStep('1', 'Tap the red button below to open Trading 212'),
+            _SellStep('2', 'Find your "$ticker" position in your portfolio'),
+            _SellStep('3', 'Review your current profit or loss'),
+            _SellStep('4', 'If you agree with the signal, tap Sell'),
+            _SellStep('5', 'Come back here and tap "Close trade" to record your result'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SellStep extends StatelessWidget {
+  final String number;
+  final String text;
+  const _SellStep(this.number, this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 20,
+            height: 20,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              color: Colors.red,
+              shape: BoxShape.circle,
+            ),
+            child: Text(number,
+                style: const TextStyle(
+                    color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
+        ],
+      ),
+    );
+  }
+}
+
+class _Step extends StatelessWidget {
+  final String number;
+  final String text;
+  const _Step(this.number, this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 20,
+            height: 20,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              color: Colors.green,
+              shape: BoxShape.circle,
+            ),
+            child: Text(number,
+                style: const TextStyle(
+                    color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdvancedRow extends StatelessWidget {
+  final String label;
+  final String value;
+  const _AdvancedRow(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 140,
+            child: Text(label,
+                style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          ),
+          Text(value,
+              style: const TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.bold)),
+        ],
+      ),
     );
   }
 }

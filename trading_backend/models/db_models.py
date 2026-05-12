@@ -72,6 +72,7 @@ class TradeAlert(SQLModel, table=True):
     price_at_alert: float
     alert_title: str
     alert_body: str
+    what_is_this: str = Field(default="")
     rationale: str
     risk_note: str
     key_factors: list = Field(default_factory=list, sa_column=Column(JSON))
@@ -80,6 +81,7 @@ class TradeAlert(SQLModel, table=True):
     executable: bool = Field(default=False)
     safety_flags: list = Field(default_factory=list, sa_column=Column(JSON))
     push_sent: bool = Field(default=False)
+    sell_trigger: Optional[str] = None  # profit_target | stop_loss | overbought | stale
     created_at: datetime = Field(default_factory=_utcnow)
 
 
@@ -199,3 +201,21 @@ class SignalPerformance(SQLModel, table=True):
 
     created_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)
+
+
+# ── Open position tracker ─────────────────────────────────────────────────────
+
+class OpenPosition(SQLModel, table=True):
+    __tablename__ = "open_positions"
+
+    id: str = Field(default_factory=_uid, primary_key=True)
+    user_id: str = Field(foreign_key="users.id", index=True)
+    signal_perf_id: str = Field(foreign_key="signal_performance.id", unique=True, index=True)
+    ticker: str = Field(index=True)
+    entry_price: float
+    amount: float
+    peak_price: Optional[float] = None  # highest price seen since entry
+    status: str = Field(default="open")  # open | closed
+    sell_alert_id: Optional[str] = None  # set when REVIEW_SELL alert fires
+    opened_at: datetime = Field(default_factory=_utcnow)
+    closed_at: Optional[datetime] = None
