@@ -39,9 +39,16 @@ _DUPLICATE_COOLDOWN_HOURS = 4
 
 
 def _is_market_hours() -> bool:
-    """Rough US market hours check in UTC (14:30–21:00)."""
+    """UK (LSE) 08:00–16:30 UTC or US (NYSE) 14:30–21:00 UTC, weekdays only."""
     now = datetime.now(timezone.utc)
-    return now.weekday() < 5 and 14 <= now.hour < 21
+    if now.weekday() >= 5:
+        return False
+    minutes = now.hour * 60 + now.minute
+    uk_open = 8 * 60        # 08:00 UTC
+    uk_close = 16 * 60 + 30 # 16:30 UTC
+    us_open = 14 * 60 + 30  # 14:30 UTC
+    us_close = 21 * 60      # 21:00 UTC
+    return (uk_open <= minutes < uk_close) or (us_open <= minutes < us_close)
 
 
 def _in_quiet_hours(user_settings: UserSettings) -> bool:
