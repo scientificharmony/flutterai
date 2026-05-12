@@ -68,7 +68,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI Trading Assistant'),
+        title: const Text('Flutter AI'),
         actions: [
           IconButton(
             icon: const Icon(Icons.analytics_outlined),

@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
     stop_scheduler()
 
 
-app = FastAPI(title="Private Trading 212 Invest AI Assistant", version="3.0.0", lifespan=lifespan)
+app = FastAPI(title="Flutter AI", version="3.0.0", lifespan=lifespan)
 
 app.include_router(health.router)
 app.include_router(scan.router)

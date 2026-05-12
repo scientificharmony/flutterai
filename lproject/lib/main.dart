@@ -56,7 +56,7 @@ class _AITradingAppState extends State<AITradingApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: _navigatorKey,
-      title: 'AI Trading Assistant',
+      title: 'Flutter AI',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,

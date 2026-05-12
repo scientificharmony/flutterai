@@ -17,4 +17,4 @@ def health():
 
 @router.get("/")
 def root():
-    return {"status": "AI Trading Assistant API is live"}
+    return {"status": "Flutter AI API is live"}
