@@ -37,7 +37,8 @@ _ETF_CATEGORIES: dict[str, str] = {
     "IITU":  "technology",
     "EQQQ":  "technology",
     "CNDX":  "technology",
-    "VHYL":  "income",
+    "VHYLL": "income",
+    "VHYLA": "income",
     "INRG":  "clean_energy",
 }
 

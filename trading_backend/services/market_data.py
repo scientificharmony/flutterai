@@ -13,7 +13,7 @@ _CACHE_TTL_SECONDS = 300  # 5 minutes
 # LSE-listed ETFs that Yahoo Finance requires a .L suffix for.
 # Keyed by the bare ticker used everywhere else in the app.
 _LSE_TICKERS: set[str] = {
-    "VUSA", "VUAG", "VWRP", "VHYL", "IITU", "EQQQ",
+    "VUSA", "VUAG", "VWRP", "VHYLL", "VHYLA", "IITU", "EQQQ",
     "INRG", "SWDA", "CSP1", "CNDX", "ISF", "VEVE",
 }
 

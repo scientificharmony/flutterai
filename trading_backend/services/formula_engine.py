@@ -19,7 +19,7 @@ from services.indicators import compute_all
 
 # Tickers known to be LSE-listed ETFs — same set as market_data._LSE_TICKERS.
 _ETF_TICKERS: set[str] = {
-    "VUSA", "VUAG", "VWRP", "VHYL", "IITU", "EQQQ",
+    "VUSA", "VUAG", "VWRP", "VHYLL", "VHYLA", "IITU", "EQQQ",
     "INRG", "SWDA", "CSP1", "CNDX", "ISF", "VEVE",
 }
 

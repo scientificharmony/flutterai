@@ -76,7 +76,8 @@ def test_mission_requests_lower_risk_returns_false(mission):
     ("IITU",  "technology"),
     ("EQQQ",  "technology"),
     ("CNDX",  "technology"),
-    ("VHYL",  "income"),
+    ("VHYLL", "income"),
+    ("VHYLA", "income"),
     ("INRG",  "clean_energy"),
     ("vusa",  "broad_market"),   # lowercase normalised
 ])
