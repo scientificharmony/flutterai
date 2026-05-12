@@ -23,6 +23,11 @@ __pycache__/
 # macOS
 .DS_Store
 
+# Firebase credentials — never commit these
+google-services.json
+GoogleService-Info.plist
+firebase-service-account*.json
+
 # Flutter / Dart
 build/
 .dart_tool/

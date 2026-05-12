@@ -4,6 +4,7 @@ Initialises Firebase lazily — gracefully skips if credentials are missing.
 """
 import logging
 import os
+from datetime import datetime, timezone
 
 from config import settings
 
@@ -38,6 +39,17 @@ def _init_firebase():
         return False
 
 
+def _is_quiet_hours() -> bool:
+    """Return True if the current UTC hour falls within the configured quiet window."""
+    start = settings.quiet_hours_start   # e.g. 22
+    end = settings.quiet_hours_end       # e.g. 8
+    hour = datetime.now(timezone.utc).hour
+    if start < end:
+        return start <= hour < end
+    # Wraps midnight: e.g. 22–8 means 22,23,0..7
+    return hour >= start or hour < end
+
+
 def send_trade_alert(
     device_token: str,
     title: str,
@@ -51,6 +63,9 @@ def send_trade_alert(
     Returns True on success, False if push is unavailable or fails.
     """
     if not _init_firebase():
+        return False
+    if _is_quiet_hours():
+        logger.debug("Push suppressed — quiet hours (UTC hour %d).", datetime.now(timezone.utc).hour)
         return False
     try:
         from firebase_admin import messaging
