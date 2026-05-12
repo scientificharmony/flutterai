@@ -3199,3 +3199,57 @@ Updated `_ETF_CATEGORIES` in `mission_filters.py` to match new canonical tickers
 | `2da0420` | docs: document quiet hours and raise default Claude call limit in env example |
 | `2fd7b4d` | fix: use full T212 canonical ticker in Review in Trading 212 deep link |
 | `1cf6228` | fix: open Trading 212 app directly via Android explicit intent |
+
+
+---
+
+## Session — Beginner BUY Alerts, Holding Tracker & REVIEW_SELL Pipeline
+
+### Overview
+This session implemented the full beginner trading loop: clear BUY alerts with plain-English guidance, automatic position tracking after the user confirms a trade, and automated REVIEW_SELL notifications when a sell trigger fires.
+
+### What changed
+
+#### Backend — 8 new/updated files
+
+| File | What it does |
+|------|-------------|
+| `trading_backend/config.py` | Added `min_push_action_strength=75`, `sell_target_pct=8.0`, `stop_loss_pct=5.0`, `stale_position_days=14`, `MIN_PUSH_ACTION_STRENGTH` property |
+| `trading_backend/models/db_models.py` | Added `what_is_this` and `sell_trigger` columns to `TradeAlert`; added `OpenPosition` table (`open_positions`) with `id`, `user_id`, `signal_perf_id`, `ticker`, `entry_price`, `amount`, `peak_price`, `status`, `sell_alert_id`, `opened_at`, `closed_at` |
+| `trading_backend/database.py` | Safe `ALTER TABLE ADD COLUMN` migration system using `PRAGMA table_info` — adds new columns without dropping existing data |
+| `trading_backend/services/claude_service.py` | New beginner-focused system prompt; `what_is_this` field added to output schema (one sentence plain-English instrument description); `max_tokens` raised to 800 |
+| `trading_backend/services/holding_reviewer.py` | NEW. `evaluate_position()` fetches live OHLCV, checks four sell triggers: `profit_target` (gain >= 8%), `stop_loss` (loss >= 5%), `overbought` (RSI>75 and in profit), `stale` (>=14 days open, <1% movement). Returns `SellSignal` dataclass or `None`. |
+| `trading_backend/workers/holding_tracker_job.py` | NEW. Runs every 30 min. For each open position: evaluates sell triggers, updates `peak_price`, creates a `REVIEW_SELL` `TradeAlert`, sends FCM push, sets `pos.sell_alert_id`. 4-hour cooldown per ticker per user. |
+| `trading_backend/workers/scheduler.py` | Added 30-minute `holding_tracker` job |
+| `trading_backend/routers/holdings.py` | NEW. `GET /holdings` (list all), `POST /holdings` (open position), `POST /holdings/{id}/close` (close position) |
+| `trading_backend/routers/alerts.py` | Auto-creates `OpenPosition` when user records `outcome=took_trade`. Added `sell_trigger` to `_to_response`. |
+| `trading_backend/routers/scan.py` | Simplified notification text: "TICKER looks like a good time to buy — Tap to see why." Added `what_is_this` to alert creation. |
+| `trading_backend/workers/scanner_job.py` | Same notification text improvements; push threshold raised to `settings.MIN_PUSH_ACTION_STRENGTH` (75). |
+| `trading_backend/models/schemas.py` | Added `what_is_this` to `ClaudeRecommendation` and `TradeAlertResponse`; added `sell_trigger` to `TradeAlertResponse` |
+| `trading_backend/main.py` | Wired in `holdings.router` |
+
+#### Flutter — 4 new/updated files
+
+| File | What it does |
+|------|-------------|
+| `lproject/lib/models/alert_model.dart` | Added `sellTrigger: String?` field to `TradeAlert` |
+| `lproject/lib/config/api_config.dart` | Added `holdings` endpoint |
+| `lproject/lib/screens/holdings_screen.dart` | NEW. Lists all open/closed positions. Shows ticker, entry price, amount, P&L in £ and %, a "SELL ALERT" badge when the backend has fired a sell alert, and a "Mark as Sold" button that calls the close endpoint. |
+| `lproject/lib/screens/alert_detail_screen.dart` | Fully reworked for beginners: signal strength colour bar (0–100), `what_is_this` instrument explanation, plain-English rationale, numbered step-by-step buy guide, separate REVIEW_SELL sell steps card, advanced toggle hiding formula sub-scores |
+| `lproject/lib/screens/home_screen.dart` | Added wallet icon button in AppBar linking to `HoldingsScreen` |
+
+### How the full loop works
+1. Backend scans every 15 min (or user manually scans). If `action_strength >= 75`, a push is sent: **"TICKER looks like a good time to buy"**.
+2. User taps the notification → opens the alert detail screen with plain-English explanation, instrument description, and step-by-step buy guide.
+3. User marks "Took Trade" → backend auto-creates an `OpenPosition` record.
+4. Every 30 minutes the holding tracker checks live prices. If a sell trigger fires (profit target, stop loss, RSI overbought, or stale position), it creates a REVIEW_SELL alert and sends a push: **"TICKER is up X% — consider taking profit"** (or equivalent).
+5. User taps the sell notification → opens alert with sell steps guide → sells in Trading 212 → marks position as sold.
+
+### Sell triggers (configurable in .env)
+| Trigger | Condition |
+|---------|-----------|
+| `profit_target` | Gain >= 8% |
+| `stop_loss` | Loss >= 5% |
+| `overbought` | RSI14 > 75 AND currently in profit |
+| `stale` | Open >= 14 days AND abs(gain) < 1% |
+
