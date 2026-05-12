@@ -10,6 +10,18 @@ import yfinance as yf
 _cache: dict[str, tuple[float, pd.DataFrame]] = {}
 _CACHE_TTL_SECONDS = 300  # 5 minutes
 
+# LSE-listed ETFs that Yahoo Finance requires a .L suffix for.
+# Keyed by the bare ticker used everywhere else in the app.
+_LSE_TICKERS: set[str] = {
+    "VUSA", "VUAG", "VWRP", "VHYL", "IITU", "EQQQ",
+    "INRG", "SWDA", "CSP1", "CNDX", "ISF", "VEVE",
+}
+
+
+def _yf_ticker(ticker: str) -> str:
+    """Return the Yahoo Finance symbol for a ticker (appends .L for LSE ETFs)."""
+    return f"{ticker}.L" if ticker.upper() in _LSE_TICKERS else ticker
+
 
 @dataclass
 class OHLCVData:
@@ -40,7 +52,7 @@ def get_ohlcv(ticker: str, period: str = "3mo") -> Optional[OHLCVData]:
     """Fetch OHLCV data for a ticker. Returns None if unavailable."""
     if not _is_fresh(ticker):
         try:
-            raw = yf.download(ticker, period=period, progress=False, auto_adjust=True)
+            raw = yf.download(_yf_ticker(ticker), period=period, progress=False, auto_adjust=True)
             if raw.empty or len(raw) < 50:
                 return None
             # Flatten MultiIndex columns if present (yfinance ≥0.2.x)
