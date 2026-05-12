@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:android_intent_plus/android_intent.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -63,10 +64,25 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
   }
 
   Future<void> _openT212(TradeAlert alert) async {
-    final url = alert.t212ReviewUrl ??
-        'https://www.trading212.com/trading-instruments/invest/${alert.ticker}';
-    final uri = Uri.parse(url);
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+    await Clipboard.setData(ClipboardData(text: alert.ticker));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${alert.ticker} copied — paste in T212 search'),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+    const package = 'com.avuscapital.trading212';
+    final intent = AndroidIntent(
+      action: 'android.intent.action.MAIN',
+      package: package,
+      componentName: 'com.avuscapital.trading212.MainActivity',
+      flags: const <int>[0x10000000], // FLAG_ACTIVITY_NEW_TASK
+    );
+    try {
+      await intent.launch();
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Could not open Trading 212')),
