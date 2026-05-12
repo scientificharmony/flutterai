@@ -13,14 +13,24 @@ _CACHE_TTL_SECONDS = 300  # 5 minutes
 # LSE-listed ETFs that Yahoo Finance requires a .L suffix for.
 # Keyed by the bare ticker used everywhere else in the app.
 _LSE_TICKERS: set[str] = {
-    "VUSA", "VUAG", "VWRP", "VHYLL", "VHYLA", "IITU", "EQQQ",
+    "VUSA", "VUAG", "VWRP", "IITU", "EQQQ",
     "INRG", "SWDA", "CSP1", "CNDX", "ISF", "VEVE",
+}
+
+# T212 tickers whose Yahoo Finance symbol differs from ticker + ".L".
+# Takes priority over _LSE_TICKERS.
+_YF_OVERRIDES: dict[str, str] = {
+    "VHYLL": "VHYL.L",  # T212 VHYLL_EQ → Yahoo VHYL.L (LSE distributing)
+    "VHYLA": "VHYL.L",  # T212 VHYLA_EQ → same underlying fund on Yahoo
 }
 
 
 def _yf_ticker(ticker: str) -> str:
-    """Return the Yahoo Finance symbol for a ticker (appends .L for LSE ETFs)."""
-    return f"{ticker}.L" if ticker.upper() in _LSE_TICKERS else ticker
+    """Return the Yahoo Finance symbol for a ticker."""
+    upper = ticker.upper()
+    if upper in _YF_OVERRIDES:
+        return _YF_OVERRIDES[upper]
+    return f"{upper}.L" if upper in _LSE_TICKERS else upper
 
 
 @dataclass
