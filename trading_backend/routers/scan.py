@@ -36,7 +36,11 @@ from services.notification_service import send_to_user_devices
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/scan", tags=["scan"])
 
-_DEFAULT_WATCHLIST = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "JPM", "V", "JNJ"]
+_DEFAULT_STOCK_WATCHLIST = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "JPM", "V", "JNJ"]
+
+_DEFAULT_ETF_WATCHLIST = ["VUSA", "VUAG", "VWRP", "VHYL", "IITU", "EQQQ", "INRG", "SWDA", "CSP1", "CNDX"]
+
+_DEFAULT_MIXED_WATCHLIST = _DEFAULT_STOCK_WATCHLIST + _DEFAULT_ETF_WATCHLIST
 
 # ── Quota helpers ───────────────────────────────────────────────────────────────
 
@@ -106,10 +110,11 @@ async def _pick_top_candidate(
     mission: Optional[str],
     user_balance: float,
     max_trade_amount: float,
-) -> tuple[Optional[object], list[object], list[str], str]:
+) -> tuple[Optional[object], list[object], list[str], str, dict[str, str]]:
     """
     Pick the best actionable candidate respecting mission constraints.
-    Returns (candidate_or_None, validated_candidates, safety_flags, status_message).
+    Returns (candidate_or_None, validated_candidates, safety_flags, status_message, inst_type_map).
+    inst_type_map maps ticker -> "ETF" | "STOCK" for all validated candidates.
     """
     safety_flags: list[str] = []
     wants_etf = mission_requests_etf(mission)
@@ -127,14 +132,26 @@ async def _pick_top_candidate(
             continue
         validated.append({"candidate": c, "type": inst_type})
 
+    inst_type_map: dict[str, str] = {v["candidate"].ticker: v["type"] for v in validated}
+
     if not validated:
-        return None, [], safety_flags, "No Trading 212 Invest validated candidates found."
+        msg = (
+            "No Trading 212 Invest ETF candidates were available for this mission."
+            if wants_etf
+            else "No Trading 212 Invest validated candidates found."
+        )
+        return None, [], safety_flags, msg, {}
 
     # Explicit ETF mission: hard exclude stocks
     if wants_etf:
         etf_only = [v for v in validated if v["type"] == "ETF"]
         if not etf_only:
-            return None, [], safety_flags + ["Explicit ETF mission: no valid ETF candidates available."], "No valid ETF candidates for this mission."
+            return (
+                None, [],
+                safety_flags + ["Explicit ETF mission: no valid ETF candidates available."],
+                "No Trading 212 Invest ETF candidates were available for this mission.",
+                inst_type_map,
+            )
         validated = etf_only
 
     # Lower-risk mission: sort ETFs above stocks if both present
@@ -146,7 +163,7 @@ async def _pick_top_candidate(
 
     top = validated[0]["candidate"]
     validated_candidates = [v["candidate"] for v in validated]
-    return top, validated_candidates, safety_flags, ""
+    return top, validated_candidates, safety_flags, "", inst_type_map
 
 
 # ── Manual scan ─────────────────────────────────────────────────────────────────
@@ -166,18 +183,33 @@ async def manual_scan(
         raise HTTPException(status_code=503, detail="Unable to verify account balance. Scan blocked for safety.")
 
     max_trade_amount = round(user_balance * (settings.MAX_RISK_PCT / 100.0), 2)
-    watchlist = body.watchlist or _DEFAULT_WATCHLIST
+    is_etf_mission = mission_requests_etf(body.mission)
+    is_lower_risk_mission = mission_requests_lower_risk(body.mission)
+
+    if body.watchlist:
+        watchlist = body.watchlist
+    elif is_etf_mission or is_lower_risk_mission:
+        watchlist = _DEFAULT_ETF_WATCHLIST
+    else:
+        watchlist = _DEFAULT_MIXED_WATCHLIST
 
     # Phase 4: mission-aware candidate filtering
     candidates = scan_watchlist(watchlist, min_score=0.0)
     if not candidates:
         _increment_usage(user, session, cost_usd=0.0)
+        no_candidates_msg = (
+            "ETF candidates were reviewed, but none met the current signal threshold."
+            if is_etf_mission
+            else "No candidates available."
+        )
         return _resolve_scan_no_action(
             user_balance, max_trade_amount,
-            "No candidates available.", ["No watchlist candidates scored above threshold."],
+            no_candidates_msg, ["No watchlist candidates scored above threshold."],
         )
 
-    top, validated_candidates, safety_flags, msg = await _pick_top_candidate(candidates, body.mission, user_balance, max_trade_amount)
+    top, validated_candidates, safety_flags, msg, inst_type_map = await _pick_top_candidate(
+        candidates, body.mission, user_balance, max_trade_amount
+    )
     if top is None:
         _increment_usage(user, session, cost_usd=0.0)
         return _resolve_scan_no_action(user_balance, max_trade_amount, msg, safety_flags)
@@ -197,7 +229,10 @@ async def manual_scan(
         return ScanResponse(status="budget_reached", user_balance=user_balance, max_trade_amount=max_trade_amount, message=budget_reason, budget_reached=True)
 
     claude_candidates = [top] + [c for c in validated_candidates if c.ticker != top.ticker][:2]
-    rec = await claude_service.analyse_candidates(claude_candidates, user_balance, max_trade_amount, mission=body.mission)
+    rec = await claude_service.analyse_candidates(
+        claude_candidates, user_balance, max_trade_amount,
+        mission=body.mission, instrument_types=inst_type_map,
+    )
     record_claude_call(user.id, session)
     claude_confidence = rec.claude_confidence
     action_strength = calculate_buy_action_strength(formula_score, claude_confidence, portfolio_fit_score)
@@ -223,7 +258,9 @@ async def manual_scan(
     if not _is_actionable(action, trading212_review_enabled, executable):
         _increment_usage(user, session, cost_usd=0.0)
         if action == "DO_NOT_ACT":
-            message = "Scan completed, but no Trading 212 Invest recommendation met the review threshold."
+            message = "Scan completed, but data was stale — no recommendation created."
+        elif is_etf_mission:
+            message = "ETF candidates were reviewed, but none met the current manual-review threshold."
         else:
             message = "Scan completed, but setup did not reach actionable review threshold."
         return _resolve_scan_no_action(

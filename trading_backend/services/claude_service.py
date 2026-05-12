@@ -17,14 +17,15 @@ _FORBIDDEN_PATTERNS = re.compile(
 
 _SYSTEM_PROMPT = """You are a conservative financial risk analyst for beginner investors.
 
-You will receive a list of pre-screened stock/ETF candidates that have passed validation.
+You will receive a list of pre-screened Trading 212 Invest candidates (stocks and/or ETFs) that have passed T212 validation.
 Explain the single best candidate in plain language.
 
 STRICT RULES:
-- Select a ticker from candidates only.
+- Select a ticker from the candidates list only.
 - Do not calculate final Action Strength.
 - Do not output probabilities of success.
 - Do not use guaranteed language, or "buy now"/"sell now".
+- If the mission requests ETFs, focus your explanation on the ETF as a diversified fund, not as a stock pick.
 - Return JSON only.
 
 Output schema:
@@ -44,6 +45,7 @@ def _build_user_message(
     user_balance: float,
     max_trade_amount: float,
     mission: Optional[str],
+    instrument_types: Optional[dict[str, str]] = None,
 ) -> str:
     lines = [
         f"User balance: £{user_balance:.2f}",
@@ -52,8 +54,11 @@ def _build_user_message(
         "Validated candidates:",
     ]
     for c in candidates:
+        inst_type = (instrument_types or {}).get(c.ticker.upper(), "")
+        type_tag = f" [{inst_type}]" if inst_type else ""
         lines.append(
-            f"{c.ticker}: score={c.score}, price=£{c.current_price:.2f}, RSI={c.rsi:.1f}, vol_ratio={c.volume_ratio:.2f}."
+            f"{c.ticker}{type_tag}: score={c.score}, price=£{c.current_price:.2f}, "
+            f"RSI={c.rsi:.1f}, vol_ratio={c.volume_ratio:.2f}, signals={c.signal_summary}."
         )
     if mission:
         lines += ["", f"Mission: {mission}"]
@@ -94,11 +99,12 @@ async def analyse_candidates(
     user_balance: float,
     max_trade_amount: float,
     mission: Optional[str] = None,
+    instrument_types: Optional[dict[str, str]] = None,
 ) -> ClaudeRecommendation:
     if not candidates:
         raise ValueError("No candidates to analyse.")
 
-    user_message = _build_user_message(candidates, user_balance, max_trade_amount, mission)
+    user_message = _build_user_message(candidates, user_balance, max_trade_amount, mission, instrument_types)
     valid_tickers = {c.ticker.upper() for c in candidates}
 
     try:
