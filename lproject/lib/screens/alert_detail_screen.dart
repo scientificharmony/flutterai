@@ -62,9 +62,10 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
     }
   }
 
-  Future<void> _openT212(String ticker) async {
-    final uri = Uri.parse(
-        'https://www.trading212.com/trading-instruments/invest/$ticker');
+  Future<void> _openT212(TradeAlert alert) async {
+    final url = alert.t212ReviewUrl ??
+        'https://www.trading212.com/trading-instruments/invest/${alert.ticker}';
+    final uri = Uri.parse(url);
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -198,7 +199,7 @@ Risk Note:        ${alert.riskNote}
     return _AlertDetail(
       alert: _alert!,
       outcome: _outcome,
-      onOpenT212: () => _openT212(_alert!.ticker),
+      onOpenT212: () => _openT212(_alert!),
       onCopy: () => _copyOrderDetails(_alert!),
       onTookTrade: _showTookTradeDialog,
       onIgnored: () => _recordOutcome('ignored'),

@@ -19,6 +19,7 @@ from models.schemas import (
     ACTION_STRENGTH_DISCLAIMER,
 )
 from services import claude_service, trading212_service
+from services.trading212_service import get_t212_ticker
 from services.action_strength_engine import calculate_buy_action_strength
 from services.action_strength_engine import calculate_sell_action_strength
 from services.budget_service import can_call_claude, can_send_alert, record_alert_sent, record_claude_call
@@ -345,6 +346,7 @@ async def manual_scan(
     if not settings.is_private_test:
         _increment_usage(user, session)
 
+    _t212_ticker = get_t212_ticker(alert.ticker)
     return ScanResponse(
         status="alert_created",
         user_balance=user_balance,
@@ -366,6 +368,8 @@ async def manual_scan(
             score_interpretation=alert.score_interpretation,
             action_strength_disclaimer=alert.action_strength_disclaimer,
             trading212_review_enabled=alert.trading212_review_enabled,
+            t212_ticker=_t212_ticker,
+            t212_review_url=f"https://www.trading212.com/trading-instruments/invest/{_t212_ticker}" if _t212_ticker else None,
             suggested_amount=alert.suggested_amount,
             price_at_alert=alert.price_at_alert,
             alert_title=alert.alert_title,

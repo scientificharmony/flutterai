@@ -89,6 +89,8 @@ class TradeAlertResponse(BaseModel):
     score_interpretation: str
     action_strength_disclaimer: str = ACTION_STRENGTH_DISCLAIMER
     trading212_review_enabled: bool
+    t212_ticker: Optional[str] = None  # full T212 canonical ticker e.g. VHYLL_EQ
+    t212_review_url: Optional[str] = None  # direct URL to instrument in T212
     suggested_amount: float
     price_at_alert: float
     alert_title: str
@@ -110,6 +112,7 @@ class ScanResponse(BaseModel):
     alert: Optional[TradeAlertResponse] = None
     message: Optional[str] = None
     budget_reached: bool = False
+    safety_flags: list[str] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):
