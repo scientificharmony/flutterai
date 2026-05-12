@@ -7,9 +7,102 @@ import '../config/api_config.dart';
 import '../models/pie_model.dart';
 import '../services/device_service.dart';
 
-class PieResultScreen extends StatelessWidget {
+class PieResultScreen extends StatefulWidget {
   final PieBuildResult pie;
   const PieResultScreen({super.key, required this.pie});
+
+  @override
+  State<PieResultScreen> createState() => _PieResultScreenState();
+}
+
+class _PieResultScreenState extends State<PieResultScreen> {
+  bool _deploying = false;
+
+  PieBuildResult get pie => widget.pie;
+
+  Future<void> _deployPie(BuildContext context) async {
+    setState(() => _deploying = true);
+    try {
+      final slicesJson = pie.slices
+          .map((s) => {
+                'ticker': s.ticker,
+                'name': s.name,
+                'instrument_type': s.instrumentType,
+                'market_theme': s.marketTheme,
+                'allocation_percent': s.allocationPercent,
+                'amount': s.amount,
+                'opportunity_score': s.opportunityScore,
+                'opportunity_strength': s.opportunityStrength,
+                'strength_label': s.strengthLabel,
+                'rationale': s.rationale,
+              })
+          .toList();
+
+      final res = await http.post(
+        Uri.parse(ApiConfig.pieDeploy),
+        headers: {
+          'Content-Type': 'application/json',
+          'device-id': DeviceService.instance.deviceId,
+        },
+        body: jsonEncode({
+          'pie_name': pie.pieName,
+          'slices': slicesJson,
+          'dividend_action': 'REINVEST',
+        }),
+      );
+
+      if (!context.mounted) return;
+
+      if (res.statusCode == 200) {
+        final data = PieDeployResponse.fromJson(
+            jsonDecode(res.body) as Map<String, dynamic>);
+        await showDialog<void>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Pie Created in Trading 212'),
+            content: Text(
+              '${data.message}\n\nOpen Trading 212 to review and fund the pie.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await launchUrl(Uri.parse('https://www.trading212.com/'),
+                      mode: LaunchMode.externalApplication);
+                },
+                child: const Text('Open T212'),
+              ),
+            ],
+          ),
+        );
+      } else if (res.statusCode == 403) {
+        // Deploy disabled on server — fall back to opening T212 manually
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'Auto-deploy is disabled. Opening Trading 212 to create manually.')),
+        );
+        await launchUrl(Uri.parse('https://www.trading212.com/'),
+            mode: LaunchMode.externalApplication);
+      } else {
+        final detail =
+            (jsonDecode(res.body))['detail'] as String? ?? 'Deployment failed.';
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(detail)));
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Deployment failed. Check connection.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _deploying = false);
+    }
+  }
 
   Future<void> _savePie(BuildContext context) async {
     if (!pie.executable) return;
@@ -87,18 +180,6 @@ class PieResultScreen extends StatelessWidget {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Slice list copied to clipboard')),
     );
-  }
-
-  Future<void> _openT212(BuildContext context) async {
-    if (!pie.executable) return;
-    const url = 'https://www.trading212.com/';
-    if (!await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication)) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open Trading 212')),
-        );
-      }
-    }
   }
 
   String _formatTimestamp(String iso) {
@@ -222,9 +303,18 @@ class PieResultScreen extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           ElevatedButton.icon(
-            onPressed: pie.executable ? () => _openT212(context) : null,
-            icon: const Icon(Icons.open_in_new),
-            label: const Text('Open Trading 212 to Create Pie'),
+            onPressed: (pie.executable && !_deploying)
+                ? () => _deployPie(context)
+                : null,
+            icon: _deploying
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.rocket_launch),
+            label: Text(_deploying ? 'Deploying…' : 'Deploy Pie to Trading 212'),
             style: ElevatedButton.styleFrom(
               backgroundColor: pie.executable ? Colors.green : Colors.grey,
               foregroundColor: Colors.white,

@@ -138,3 +138,17 @@ class PieTemplate(BaseModel):
     description: str
     themes: list[str]
     pro_only: bool
+
+
+# ── Pie deploy ────────────────────────────────────────────────────────────────
+
+class PieDeployRequest(BaseModel):
+    pie_name: str
+    slices: list[PieSlice]
+    dividend_action: str = "REINVEST"
+
+
+class PieDeployResponse(BaseModel):
+    t212_pie_id: int
+    pie_name: str
+    message: str

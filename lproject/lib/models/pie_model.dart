@@ -135,6 +135,24 @@ class PieBuildResult {
   }
 }
 
+class PieDeployResponse {
+  final int t212PieId;
+  final String pieName;
+  final String message;
+
+  const PieDeployResponse({
+    required this.t212PieId,
+    required this.pieName,
+    required this.message,
+  });
+
+  factory PieDeployResponse.fromJson(Map<String, dynamic> j) => PieDeployResponse(
+        t212PieId: (j['t212_pie_id'] as num).toInt(),
+        pieName: j['pie_name'] as String,
+        message: j['message'] as String,
+      );
+}
+
 class SavedPieSummary {
   final String id;
   final String pieName;

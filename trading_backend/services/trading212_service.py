@@ -143,3 +143,43 @@ def get_instrument_name(ticker: str) -> str:
     """Return the human-readable name for a ticker, or the ticker itself."""
     inst = _instruments_cache.get(ticker.upper(), {})
     return inst.get("name", ticker)
+
+
+def get_t212_ticker(ticker: str) -> str | None:
+    """Return the canonical T212 ticker (e.g. 'AAPL_US_EQ') for a normalised ticker."""
+    inst = _instruments_cache.get(_normalise_symbol(ticker))
+    return inst.get("ticker") if inst else None
+
+
+async def create_pie(
+    name: str,
+    slices: list[dict],
+    dividend_action: str = "REINVEST",
+) -> dict:
+    """
+    Create a pie in the user's T212 account via POST /equity/pies.
+    slices: list of {"ticker": str, "allocation_percent": float}
+    Raises ValueError for unmappable tickers, httpx.HTTPStatusError on API rejection.
+    """
+    instrument_shares: dict[str, float] = {}
+    for s in slices:
+        t212_ticker = get_t212_ticker(s["ticker"])
+        if t212_ticker is None:
+            raise ValueError(f"Cannot resolve T212 ticker for {s['ticker']!r}. "
+                             "Refresh the instrument list and try again.")
+        instrument_shares[t212_ticker] = round(s["allocation_percent"] / 100.0, 6)
+
+    payload = {
+        "name": name,
+        "dividendCashAction": dividend_action,
+        "instrumentShares": instrument_shares,
+    }
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        r = await client.post(
+            f"{settings.t212_base_url}/equity/pies",
+            json=payload,
+            **_request_kwargs(),
+        )
+        r.raise_for_status()
+        return r.json()

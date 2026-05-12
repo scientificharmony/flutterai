@@ -21,6 +21,8 @@ from models.pie_schemas import (
     DataFreshness,
     PieBuildRequest,
     PieBuildResponse,
+    PieDeployRequest,
+    PieDeployResponse,
     PieSlice,
     PieTemplate,
     SavePieRequest,
@@ -445,6 +447,44 @@ def pie_history(
         .order_by(SavedPie.created_at.desc())
     ).all()
     return [_to_saved_response(p) for p in pies]
+
+
+@router.post("/deploy", response_model=PieDeployResponse)
+async def deploy_pie(
+    body: PieDeployRequest,
+    user: User = Depends(get_current_user),
+):
+    """
+    Create a pie in the user's live/demo T212 account.
+    Requires ENABLE_ORDER_API=true in server config.
+    """
+    if not settings.enable_order_api:
+        raise HTTPException(
+            status_code=403,
+            detail="Pie deployment is disabled on this server. Set ENABLE_ORDER_API=true to enable.",
+        )
+    if not body.slices:
+        raise HTTPException(status_code=422, detail="No slices provided.")
+
+    slices = [
+        {"ticker": s.ticker, "allocation_percent": s.allocation_percent}
+        for s in body.slices
+    ]
+    try:
+        result = await trading212_service.create_pie(body.pie_name, slices, body.dividend_action)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        logger.error("T212 pie creation failed for user=%s: %s", user.id, exc)
+        raise HTTPException(status_code=502, detail=f"Trading 212 rejected the request: {exc}")
+
+    pie_id = result.get("id")
+    logger.info("PIE DEPLOY | user=%s | pie=%r | t212_id=%s", user.id, body.pie_name, pie_id)
+    return PieDeployResponse(
+        t212_pie_id=pie_id,
+        pie_name=body.pie_name,
+        message=f"Pie '{body.pie_name}' created in your Trading 212 account (ID {pie_id}).",
+    )
 
 
 def _to_saved_response(saved: SavedPie) -> SavedPieResponse:
