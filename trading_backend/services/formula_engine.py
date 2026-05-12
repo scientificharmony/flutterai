@@ -38,10 +38,27 @@ class ScoredCandidate:
 
 
 def _score_rsi(rsi: float) -> tuple[float, str]:
+    """Stock RSI scoring — rewards recovery from oversold."""
     if 30 <= rsi <= 45:
         return 25.0, f"RSI {rsi:.1f} in recovery zone"
     if 45 < rsi <= 55:
         return 15.0, f"RSI {rsi:.1f} neutral"
+    if rsi < 30:
+        return 10.0, f"RSI {rsi:.1f} oversold"
+    return 0.0, ""
+
+
+def _score_rsi_etf(rsi: float) -> tuple[float, str]:
+    """ETF RSI scoring — rewards healthy momentum, not just oversold recovery.
+    ETFs in a bull market routinely trade at RSI 55-75; that is a positive
+    signal, not a warning. Only penalise when truly overbought (>75).
+    """
+    if 30 <= rsi <= 45:
+        return 25.0, f"RSI {rsi:.1f} in recovery zone"
+    if 45 < rsi <= 65:
+        return 20.0, f"RSI {rsi:.1f} healthy momentum"
+    if 65 < rsi <= 75:
+        return 10.0, f"RSI {rsi:.1f} strong but not overbought"
     if rsi < 30:
         return 10.0, f"RSI {rsi:.1f} oversold"
     return 0.0, ""
@@ -139,7 +156,7 @@ def score_candidate(ticker: str, is_etf: Optional[bool] = None) -> Optional[Scor
     reasons: list[str] = []
 
     for pts, label in [
-        _score_rsi(current_rsi),
+        (_score_rsi_etf if etf_mode else _score_rsi)(current_rsi),
         _score_sma20(close, sma20),
         _score_trend(sma20, sma50),
         (_score_volume_etf if etf_mode else _score_volume_stock)(vol_ratio),
