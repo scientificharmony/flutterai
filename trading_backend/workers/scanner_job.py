@@ -114,6 +114,13 @@ def _suggested_amount_for(action: str, executable: bool, max_trade_amount: float
     return min(max_trade_amount, round(max_trade_amount * 0.7, 2))
 
 
+def _candidate_log(candidates: list, limit: int = 5) -> str:
+    return ", ".join(
+        f"{c.ticker}:{int(round(c.score))}"
+        for c in candidates[:limit]
+    )
+
+
 async def _pick_top_candidate(
     candidates: list,
     mission: str | None,
@@ -217,6 +224,13 @@ async def run_strategy_scan(strategy_id: str) -> None:
             session.add(strategy)
             session.commit()
             return
+        logger.info(
+            "Strategy %s: formula candidates | watchlist=%d | candidates=%d | top=%s",
+            strategy_id,
+            len(watchlist),
+            len(candidates),
+            _candidate_log(candidates),
+        )
 
         # Deduplicate and validate — Invest only (STOCK/ETF)
         non_duplicate: list[object] = []
@@ -228,11 +242,24 @@ async def run_strategy_scan(strategy_id: str) -> None:
 
         top, validated_candidates, safety_flags, msg, inst_type_map = await _pick_top_candidate(non_duplicate, mission=None)
         if top is None:
-            logger.info("Strategy %s: %s", strategy_id, msg)
+            logger.info(
+                "Strategy %s: %s | validation_flags=%s",
+                strategy_id,
+                msg,
+                "; ".join(safety_flags) or "none",
+            )
             strategy.last_scanned_at = datetime.now(timezone.utc)
             session.add(strategy)
             session.commit()
             return
+        logger.info(
+            "Strategy %s: validated candidates | top=%s | candidates=%s | types=%s | validation_flags=%s",
+            strategy_id,
+            top.ticker,
+            _candidate_log(validated_candidates),
+            inst_type_map,
+            "; ".join(safety_flags) or "none",
+        )
 
         formula_score = int(round(top.score))
         if formula_score < settings.SCHEDULED_MIN_FORMULA_SCORE_FOR_CLAUDE:
