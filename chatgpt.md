@@ -4274,3 +4274,34 @@ Expected healthy scheduler startup:
 forex_monitor=5m, forex_entry=15m
 ```
 
+### Linode confirmation
+
+After the startup crash, Linode was checked:
+
+```bash
+cd ~/flutterai/flutterai
+git fetch origin
+git pull --ff-only origin master
+git log --oneline -3
+```
+
+Confirmed latest commit:
+
+```text
+2f67a43 fix: import settings for forex entry scheduler
+```
+
+Service was restarted and user confirmed the scheduler startup line is visible:
+
+```text
+forex_monitor=5m, forex_entry=15m
+```
+
+Current healthy state:
+- forex setup scanner every 15 minutes
+- forex position monitor every 5 minutes
+- IG demo market data connected
+- entry setup push notifications enabled
+- status-change push notifications enabled
+- demo-only auto-close available when `ENABLE_FOREX_AUTO_CLOSE=true`
+
