@@ -3469,3 +3469,381 @@ SCHEDULED SCAN no-action | strategy=private-etf-scanner | ticker=... | formula_s
 
 If timezone error still appears, Linode did not pull the latest patch.
 
+---
+
+## 2026-05-13 — Push Notifications, Scanner Tuning, and Forex Lab Build-Out
+
+### Context
+
+Working backend:
+- Linode backend: `172.237.116.65`
+- Service: `flutterai-backend.service`
+- Repo root on Linode: `~/flutterai/flutterai`
+- Backend path: `~/flutterai/flutterai/trading_backend`
+
+Current app direction:
+- Keep Trading 212 Invest flow for ETF/share alerts.
+- Add separate Forex Lab for IG demo CFD/forex practice.
+- Forex Lab must remain practice-only until explicitly made safe for real execution.
+
+### Push notification investigation
+
+Initial issue:
+- Expected push notifications were not arriving.
+- Test push worked, so Firebase/device push path was alive.
+- Scheduled scanner was running, but no user strategy existed on Linode at first.
+
+Confirmed Linode state:
+```bash
+sqlite3 hey_jimmy.db "select id,device_id,plan from users;"
+```
+
+Result:
+```text
+a16610ae-97d3-4e32-900a-3b0e38d03314|chris|pro
+```
+
+Created/enabled strategy:
+- Strategy id: `private-etf-scanner`
+- User: `chris`
+- Initially 30 tickers, later expanded to 70 tickers.
+- Scan interval: 15 minutes.
+- Push action strength threshold was kept high initially, then lowered after near-miss scans.
+
+Important threshold decisions:
+- `75` was judged high but sensible for high-confidence alerts.
+- Near misses appeared at `74`, so `MIN_PUSH_ACTION_STRENGTH` was lowered to `74`.
+- User later expanded watchlist to 70 instruments to increase opportunity count.
+
+Useful diagnostics endpoint:
+```bash
+curl -s http://localhost:8000/test/notification-diagnostics
+```
+
+Known useful fields:
+- `push_enabled`
+- `registered_device_tokens`
+- `strategies_enabled`
+- `enabled_strategy_watchlists`
+- `open_positions`
+- `today_claude_calls`
+- `today_alerts_sent`
+- `min_push_action_strength`
+
+### Scanner and budget optimisation
+
+Pushed commits:
+```text
+a8a04ce fix: optimize scheduled scanner diagnostics and budget use
+a61b011 chore: log scheduled scanner candidate selection
+```
+
+Key backend changes:
+- Added scheduler diagnostics showing why scans do or do not alert.
+- Added candidate-selection logs:
+```text
+formula candidates | watchlist=... | candidates=... | top=...
+validated candidates | top=... | candidates=... | types=...
+```
+- Added Claude budget controls:
+  - `CLAUDE_MAX_TOKENS=550`
+  - max candidates per Claude call
+  - minimum formula score gate before calling Claude
+  - prompt caching support
+- Fixed offset-naive vs offset-aware datetime crashes in:
+  - scanner duplicate cooldown
+  - outcome checker
+- Improved Yahoo ticker mapping for LSE-style tickers.
+- Fixed `push_sent` accuracy so it only becomes true if FCM succeeds.
+
+Current model:
+```text
+claude-sonnet-4-20250514
+```
+
+Attempted:
+```text
+claude-3-5-sonnet-20241022
+```
+
+Result:
+- Anthropic returned `404 Not Found`, so reverted to current Sonnet 4 model.
+
+### Live ETF alert result
+
+Scanner eventually created a real scheduled alert:
+```text
+SCHEDULED SCAN alert_created | strategy=private-etf-scanner | ticker=HMCH | score=80 | claude_conf=72 | action_strength=77 | action=BUY_REVIEW
+```
+
+User received push and took a practice trade.
+
+Open holding showed:
+```json
+{
+  "ticker": "HMCH",
+  "entry_price": 593.246,
+  "amount": 350.0,
+  "status": "open"
+}
+```
+
+Notes:
+- User actually bought around £400 in practice funds, but app recorded suggested amount.
+- Holding tracker runs every 30 minutes.
+- Sell/review trigger is expected only when stop/target/stale/overbought style rules fire.
+
+### Forex Lab decision
+
+User wanted forex support.
+
+Decision:
+- Trading 212 Public API currently fits Invest/equity endpoints, not CFD/forex execution.
+- Forex Lab should be separate from Invest alerts.
+- Use IG demo CFD account for forex practice.
+- Keep all forex actions manual/practice-only.
+
+IG setup findings:
+- IG API keys require Web API demo login details.
+- The API `identifier` is not the normal email login.
+- User had to set separate **Web API demo login details**:
+  - Web API demo username
+  - Web API demo password
+- Before this, IG returned:
+```text
+401 Unauthorized
+400 Bad Request
+validation.pattern.invalid.authenticationRequest.identifier
+```
+
+After setting Web API demo credentials, IG auth succeeded:
+```text
+POST https://demo-api.ig.com/gateway/deal/session HTTP/1.1 200 OK
+```
+
+IG market lookups succeeded for:
+```text
+EURUSD
+GBPUSD
+USDJPY
+EURGBP
+AUDUSD
+USDCHF
+GBPJPY
+```
+
+Example EPICs:
+```text
+CS.D.EURUSD.CFD.IP
+CS.D.GBPUSD.CFD.IP
+CS.D.USDJPY.CFD.IP
+```
+
+### Forex Lab backend
+
+Pushed commits:
+```text
+97ee158 feat: add forex lab practice mode
+54f7f5d feat: connect forex lab to IG snapshots
+abf80d5 feat: track forex practice trades
+cdd7e03 feat: add forex trade assistant guidance
+```
+
+Added config settings:
+```env
+FOREX_PROVIDER=ig
+FOREX_DEMO_BALANCE=10000
+FOREX_RISK_BPS=50
+FOREX_MIN_SIGNAL_STRENGTH=78
+IG_API_KEY=...
+IG_USERNAME=...
+IG_PASSWORD=...
+IG_ACCOUNT_TYPE=DEMO
+```
+
+Security note:
+- IG key/password were accidentally pasted into logs once.
+- They should be treated as exposed and rotated.
+- Never paste IG secrets into chat/log output.
+
+Added endpoints:
+```text
+GET  /forex/summary
+POST /forex/scan
+GET  /forex/positions
+POST /forex/positions
+POST /forex/positions/{id}/close
+```
+
+`/forex/summary` now:
+- Authenticates to IG demo.
+- Fetches market EPICs.
+- Fetches bid/offer snapshots.
+- Produces practice-only LONG/SHORT/NO_TRADE signals.
+- Falls back to mock data if IG fails.
+
+`/forex/positions` now:
+- Stores manual practice forex trades.
+- Tracks pair, direction, entry, stop, target, risk, units, status.
+- Calculates current P/L from IG demo mid-price.
+- Records realised P/L when closed.
+
+Added DB table:
+```text
+forex_positions
+```
+
+Migration:
+- `database.py` creates `forex_positions` for existing SQLite deployments.
+
+### Forex Lab app
+
+Added:
+- `lproject/lib/screens/forex_lab_screen.dart`
+- Forex Lab entry on home screen.
+- App bar Forex icon.
+- Backend-connected summary UI.
+- IG demo connected status.
+- £10,000 demo balance display.
+- Risk per trade display: £50 at 0.5%.
+- Practice signals list.
+- “I took this practice trade” button.
+- Open practice trades section.
+- “Close practice trade” button.
+- Assistant status card on each open forex position.
+
+Terminology used in the UI:
+- `LONG`: betting the pair goes up.
+- `SHORT`: betting the pair goes down.
+- `NO_TRADE`: do nothing.
+
+Traffic-light assistant statuses:
+```text
+HOLD
+HOLD WITH CAUTION
+PROTECT PROFIT
+TAKE PROFIT
+CUT LOSS
+CLOSED
+```
+
+Plain-English guidance examples:
+- `TAKE_PROFIT`: target reached, consider closing.
+- `CUT_LOSS`: stop reached, trade idea invalid.
+- `PROTECT_PROFIT`: trade well in profit, watch reversal or lock gain.
+- `HOLD`: price remains between stop and target.
+
+### Forex practice trade test
+
+User opened and closed a practice forex trade:
+```json
+{
+  "pair": "EUR/USD",
+  "direction": "SHORT",
+  "entry_price": 1.1711,
+  "stop_loss": 1.1746,
+  "take_profit": 1.1641,
+  "risk_amount": 50.0,
+  "position_units": 14285,
+  "status": "closed",
+  "close_price": 1.17107,
+  "realised_pnl": 0.43
+}
+```
+
+Interpretation:
+- SHORT trade profits if EUR/USD falls.
+- Price moved from `1.17110` to `1.17107`.
+- Small favourable move produced `+£0.43`.
+
+### Commands used for Linode deployment
+
+Standard deploy:
+```bash
+cd ~/flutterai/flutterai
+git pull --ff-only origin master
+cd trading_backend
+sudo systemctl restart flutterai-backend.service
+sleep 3
+curl -s http://localhost:8000/health
+```
+
+Forex checks:
+```bash
+curl -s http://localhost:8000/forex/summary
+curl -s http://localhost:8000/forex/positions
+```
+
+IG auth/market log check:
+```bash
+sudo journalctl -u flutterai-backend.service -n 80 --no-pager | grep -i "ig forex\|session\|401\|400\|markets"
+```
+
+Expected healthy IG lines:
+```text
+POST https://demo-api.ig.com/gateway/deal/session "HTTP/1.1 200 OK"
+GET https://demo-api.ig.com/gateway/deal/markets?searchTerm=EURUSD "HTTP/1.1 200 OK"
+GET https://demo-api.ig.com/gateway/deal/markets/CS.D.EURUSD.CFD.IP "HTTP/1.1 200 OK"
+```
+
+### Local verification
+
+Backend tests repeatedly passed:
+```bash
+pytest tests/test_forex_lab.py tests/test_security_guards.py
+```
+
+Latest result:
+```text
+17 passed
+```
+
+Flutter debug APK builds succeeded:
+```bash
+D:\DEV\flutter\bin\flutter.bat build apk --debug
+```
+
+Installed to Samsung device:
+```bash
+adb -s RFCY11HPMGW install -r build\app\outputs\flutter-apk\app-debug.apk
+```
+
+`flutter analyze` still reports older unrelated warnings in:
+- `alert_detail_screen.dart`
+- `pie_result_screen.dart`
+- `fcm_service.dart`
+
+No Forex Lab compile errors remain.
+
+### Current latest commits
+
+```text
+cdd7e03 feat: add forex trade assistant guidance
+8601fec feat: close forex practice trades from app
+abf80d5 feat: track forex practice trades
+54f7f5d feat: connect forex lab to IG snapshots
+97ee158 feat: add forex lab practice mode
+a61b011 chore: log scheduled scanner candidate selection
+a8a04ce fix: optimize scheduled scanner diagnostics and budget use
+```
+
+### Next recommended work
+
+1. Add scheduled forex position monitoring.
+2. Send push notifications for:
+   - take profit reached
+   - stop reached
+   - protect profit
+   - stale/no movement
+3. Add closed forex trade history in the app.
+4. Add safer beginner explanations inside Forex Lab:
+   - LONG means pair up
+   - SHORT means pair down
+   - Stop means invalidation
+   - Target means planned exit
+5. Consider a daily Forex Lab summary:
+   - open trades
+   - realised P/L
+   - win/loss count
+   - risk used
+
