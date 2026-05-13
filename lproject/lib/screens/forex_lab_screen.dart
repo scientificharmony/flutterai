@@ -120,6 +120,35 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
     }
   }
 
+  Future<void> _closePracticeTrade(ForexPosition position) async {
+    try {
+      final res = await http.post(
+        Uri.parse('${ApiConfig.forexPositions}/${position.id}/close'),
+        headers: {
+          'device-id': DeviceService.instance.deviceId,
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({}),
+      );
+      if (!mounted) return;
+      if (res.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${position.pair} practice trade closed.')),
+        );
+        await _loadSummary();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not close practice trade (${res.statusCode}).')),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Forex backend unavailable.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -158,7 +187,10 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
           const SizedBox(height: 12),
           _ConnectionPanel(summary: _summary),
           const SizedBox(height: 12),
-          _OpenForexPositions(positions: _positions),
+          _OpenForexPositions(
+            positions: _positions,
+            onClose: _closePracticeTrade,
+          ),
           const SizedBox(height: 12),
           Text('Practice signals',
               style: GoogleFonts.orbitron(
@@ -468,8 +500,12 @@ class _SignalTile extends StatelessWidget {
 
 class _OpenForexPositions extends StatelessWidget {
   final List<ForexPosition> positions;
+  final ValueChanged<ForexPosition> onClose;
 
-  const _OpenForexPositions({required this.positions});
+  const _OpenForexPositions({
+    required this.positions,
+    required this.onClose,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -504,7 +540,10 @@ class _OpenForexPositions extends StatelessWidget {
         const SizedBox(height: 10),
         ...open.map((pos) => Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: _ForexPositionTile(position: pos),
+              child: _ForexPositionTile(
+                position: pos,
+                onClose: () => onClose(pos),
+              ),
             )),
       ],
     );
@@ -513,8 +552,12 @@ class _OpenForexPositions extends StatelessWidget {
 
 class _ForexPositionTile extends StatelessWidget {
   final ForexPosition position;
+  final VoidCallback onClose;
 
-  const _ForexPositionTile({required this.position});
+  const _ForexPositionTile({
+    required this.position,
+    required this.onClose,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -553,6 +596,20 @@ class _ForexPositionTile extends StatelessWidget {
               Expanded(child: _Metric(label: 'Now', value: position.currentPrice?.toStringAsFixed(5) ?? '-')),
               Expanded(child: _Metric(label: 'Risk', value: '£${position.riskAmount.toStringAsFixed(0)}')),
             ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onClose,
+              icon: const Icon(Icons.check_circle_outline, size: 17),
+              label: const Text('Close practice trade'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.textPrimary,
+                side: const BorderSide(color: AppColors.border),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
           ),
         ],
       ),
