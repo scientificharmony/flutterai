@@ -22,6 +22,7 @@ def _run_migrations() -> None:
     _add_column_if_missing("forex_positions", "ig_deal_id", "TEXT")
     _add_column_if_missing("forex_positions", "ig_epic", "TEXT")
     _add_column_if_missing("forex_positions", "ig_size", "REAL")
+    _create_forex_entry_alerts_if_missing()
 
 
 def _add_column_if_missing(table: str, column: str, col_def: str) -> None:
@@ -73,6 +74,36 @@ def _create_forex_positions_if_missing() -> None:
             session.commit()
         except Exception as exc:
             logger.warning("Migration skipped forex_positions create: %s", exc)
+
+
+def _create_forex_entry_alerts_if_missing() -> None:
+    """Create Forex Lab entry-alert history for existing SQLite deployments."""
+    with Session(engine) as session:
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS forex_entry_alerts (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    pair TEXT NOT NULL,
+                    direction TEXT NOT NULL,
+                    strength INTEGER NOT NULL,
+                    timeframe TEXT NOT NULL DEFAULT '15m',
+                    entry_price REAL NOT NULL,
+                    stop_loss REAL NOT NULL,
+                    take_profit REAL NOT NULL,
+                    risk_amount REAL NOT NULL,
+                    position_units INTEGER NOT NULL DEFAULT 0,
+                    rationale TEXT NOT NULL DEFAULT '',
+                    push_sent BOOLEAN NOT NULL DEFAULT 0,
+                    created_at DATETIME NOT NULL,
+                    FOREIGN KEY(user_id) REFERENCES users (id)
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_forex_entry_alerts_user_id ON forex_entry_alerts (user_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_forex_entry_alerts_pair ON forex_entry_alerts (pair)"))
+            session.commit()
+        except Exception as exc:
+            logger.warning("Migration skipped forex_entry_alerts create: %s", exc)
 
 
 def get_session():

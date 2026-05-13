@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     forex_risk_bps: int = 50
     forex_min_signal_strength: int = 78
     enable_forex_auto_close: bool = False
+    enable_forex_entry_alerts: bool = True
+    forex_entry_scan_minutes: int = 15
+    forex_entry_cooldown_hours: int = 4
     ig_api_key: str = ""
     ig_username: str = ""
     ig_password: str = ""
@@ -121,6 +124,12 @@ class Settings(BaseSettings):
     def FOREX_MIN_SIGNAL_STRENGTH(self) -> int: return self.forex_min_signal_strength
     @property
     def ENABLE_FOREX_AUTO_CLOSE(self) -> bool: return self.enable_forex_auto_close
+    @property
+    def ENABLE_FOREX_ENTRY_ALERTS(self) -> bool: return self.enable_forex_entry_alerts
+    @property
+    def FOREX_ENTRY_SCAN_MINUTES(self) -> int: return self.forex_entry_scan_minutes
+    @property
+    def FOREX_ENTRY_COOLDOWN_HOURS(self) -> int: return self.forex_entry_cooldown_hours
     @property
     def IG_API_KEY(self) -> str: return self.ig_api_key
     @property

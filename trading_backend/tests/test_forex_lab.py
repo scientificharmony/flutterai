@@ -275,3 +275,76 @@ def test_forex_monitor_auto_closes_demo_position(db_engine, monkeypatch):
         assert position.realised_pnl == 60.0
 
     assert ("DIAUTOCLOSE", "LONG", 1.0) in closed
+
+
+def test_forex_entry_scanner_sends_setup_push(db_engine, monkeypatch):
+    from sqlmodel import Session
+    from models.db_models import DeviceToken, ForexEntryAlert, User
+    from services.forex_service import ForexSignalResponse, ForexSummaryResponse
+    from workers import forex_entry_scanner_job
+
+    sent = []
+
+    signal = ForexSignalResponse(
+        pair="EUR/USD",
+        direction="SHORT",
+        strength=82,
+        timeframe="15m",
+        entry=1.171,
+        stop_loss=1.1745,
+        take_profit=1.164,
+        risk_reward=2.0,
+        risk_amount=50,
+        position_units=14285,
+        rationale="Practice-only IG demo snapshot.",
+        invalidation="Stop hit.",
+    )
+    summary = ForexSummaryResponse(
+        provider="ig",
+        connected=True,
+        account_type="DEMO",
+        demo_balance=10000,
+        risk_bps=50,
+        risk_amount=50,
+        min_signal_strength=78,
+        pairs=["EUR/USD"],
+        signals=[signal],
+    )
+
+    monkeypatch.setattr(forex_entry_scanner_job.settings, "enable_forex_entry_alerts", True)
+    monkeypatch.setattr(forex_entry_scanner_job.settings, "enable_push_notifications", True)
+    monkeypatch.setattr(forex_entry_scanner_job, "engine", db_engine)
+    monkeypatch.setattr(forex_entry_scanner_job, "get_forex_summary", lambda timeframe, pairs: summary)
+    monkeypatch.setattr(
+        forex_entry_scanner_job,
+        "send_to_user_devices",
+        lambda tokens, title, body, alert_id, ticker, action_strength=None: sent.append((title, body, ticker)) or 1,
+    )
+
+    with Session(db_engine) as session:
+        user = User(device_id="forex-entry-user", plan="pro")
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        user_id = user.id
+        session.add(DeviceToken(user_id=user_id, token="entry-token", platform="android"))
+        session.commit()
+
+    import asyncio
+
+    asyncio.run(forex_entry_scanner_job.run_forex_entry_scanner())
+
+    with Session(db_engine) as session:
+        alert = session.exec(
+            select(ForexEntryAlert).where(ForexEntryAlert.user_id == user_id)
+        ).first()
+        assert alert is not None
+        assert alert.pair == "EUR/USD"
+        assert alert.push_sent is True
+
+    assert sent
+    assert "Forex setup" in sent[0][0]
+
+    sent.clear()
+    asyncio.run(forex_entry_scanner_job.run_forex_entry_scanner())
+    assert sent == []
