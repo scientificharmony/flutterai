@@ -239,5 +239,7 @@ class ForexPosition(SQLModel, table=True):
     status: str = Field(default="open")  # open | closed
     close_price: Optional[float] = None
     realised_pnl: Optional[float] = None
+    last_assistant_status: Optional[str] = None
+    last_notified_status: Optional[str] = None
     opened_at: datetime = Field(default_factory=_utcnow)
     closed_at: Optional[datetime] = None

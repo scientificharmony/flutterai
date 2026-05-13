@@ -59,7 +59,7 @@ def _calculate_pnl(pos: ForexPosition, price: Optional[float]) -> tuple[Optional
     return round(pnl, 2), round(pnl_pct, 3)
 
 
-def _assistant_guidance(pos: ForexPosition, price: Optional[float], pnl: Optional[float]) -> tuple[str, str]:
+def assistant_guidance(pos: ForexPosition, price: Optional[float], pnl: Optional[float]) -> tuple[str, str]:
     if pos.status == "closed":
         return "CLOSED", "Practice trade is closed and realised P/L has been recorded."
     if price is None:
@@ -88,7 +88,7 @@ def _assistant_guidance(pos: ForexPosition, price: Optional[float], pnl: Optiona
 def _to_response(pos: ForexPosition, current_price: Optional[float] = None) -> ForexPositionResponse:
     price = current_price if pos.status == "open" else pos.close_price
     pnl, pnl_pct = _calculate_pnl(pos, price)
-    assistant_status, assistant_message = _assistant_guidance(pos, price, pnl)
+    assistant_status, assistant_message = assistant_guidance(pos, price, pnl)
     return ForexPositionResponse(
         id=pos.id,
         pair=pos.pair,

@@ -1,3 +1,6 @@
+from sqlmodel import select
+
+
 def test_forex_summary_returns_mock_practice_signals(client):
     response = client.get("/forex/summary", headers={"device-id": "forex-device"})
 
@@ -127,3 +130,56 @@ def test_forex_position_can_be_opened_and_closed(client, monkeypatch):
     assert closed.json()["status"] == "closed"
     assert closed.json()["realised_pnl"] == 60.0
     assert closed.json()["assistant_status"] == "CLOSED"
+
+
+def test_forex_monitor_notifies_when_status_changes(db_engine, monkeypatch):
+    from sqlmodel import Session
+    from models.db_models import DeviceToken, ForexPosition, User
+    from workers import forex_position_monitor_job
+
+    sent = []
+
+    monkeypatch.setattr(forex_position_monitor_job.settings, "enable_push_notifications", True)
+    monkeypatch.setattr(forex_position_monitor_job, "engine", db_engine)
+    monkeypatch.setattr(forex_position_monitor_job, "get_forex_mid_price", lambda pair: 1.086)
+    monkeypatch.setattr(
+        forex_position_monitor_job,
+        "send_to_user_devices",
+        lambda tokens, title, body, alert_id, ticker, action_strength=None: sent.append((title, body, ticker)) or 1,
+    )
+
+    with Session(db_engine) as session:
+        user = User(device_id="forex-monitor-user", plan="pro")
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        user_id = user.id
+        session.add(DeviceToken(user_id=user_id, token="monitor-token", platform="android"))
+        position = ForexPosition(
+            user_id=user_id,
+            pair="EUR/USD",
+            direction="LONG",
+            entry_price=1.08,
+            stop_loss=1.077,
+            take_profit=1.086,
+            risk_amount=50,
+            position_units=10000,
+            timeframe="15m",
+            last_assistant_status="HOLD",
+        )
+        session.add(position)
+        session.commit()
+
+    import asyncio
+
+    asyncio.run(forex_position_monitor_job.run_forex_position_monitoring())
+
+    with Session(db_engine) as session:
+        position = session.exec(
+            select(ForexPosition).where(ForexPosition.user_id == user_id)
+        ).first()
+        assert position.last_assistant_status == "TAKE_PROFIT"
+        assert position.last_notified_status == "TAKE_PROFIT"
+
+    assert sent
+    assert "target reached" in sent[0][0].lower()

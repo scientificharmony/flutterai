@@ -17,6 +17,8 @@ def _run_migrations() -> None:
     _add_column_if_missing("trade_alerts", "sell_trigger", "TEXT")
     _add_column_if_missing("open_positions", "peak_price", "REAL")
     _create_forex_positions_if_missing()
+    _add_column_if_missing("forex_positions", "last_assistant_status", "TEXT")
+    _add_column_if_missing("forex_positions", "last_notified_status", "TEXT")
 
 
 def _add_column_if_missing(table: str, column: str, col_def: str) -> None:
@@ -53,6 +55,8 @@ def _create_forex_positions_if_missing() -> None:
                     status TEXT NOT NULL DEFAULT 'open',
                     close_price REAL,
                     realised_pnl REAL,
+                    last_assistant_status TEXT,
+                    last_notified_status TEXT,
                     opened_at DATETIME NOT NULL,
                     closed_at DATETIME,
                     FOREIGN KEY(user_id) REFERENCES users (id)
