@@ -3847,3 +3847,199 @@ a8a04ce fix: optimize scheduled scanner diagnostics and budget use
    - win/loss count
    - risk used
 
+---
+
+## 2026-05-13 — Forex Level 2 Auto-Close
+
+### User request
+
+User wanted the app to automatically action forex exits after the user manually enters a trade:
+
+```text
+Level 2: user enters manually, app automatically closes based on status
+```
+
+Decision:
+- Do **not** auto-enter trades.
+- Allow demo-only auto-close for trades the user has already manually entered in IG and recorded in Hey Jimmy.
+- Only auto-close on hard exit statuses:
+  - `TAKE_PROFIT`
+  - `CUT_LOSS`
+- Do not auto-close on:
+  - `HOLD`
+  - `HOLD_CAUTION`
+  - `PROTECT_PROFIT`
+
+### Safety gates
+
+Implemented hard locks:
+
+```env
+ENABLE_FOREX_AUTO_CLOSE=true
+IG_ACCOUNT_TYPE=DEMO
+```
+
+Auto-close will only run when:
+- `ENABLE_FOREX_AUTO_CLOSE=true`
+- `IG_ACCOUNT_TYPE=DEMO`
+- the Hey Jimmy forex practice position has a linked IG `dealId`
+- status becomes `TAKE_PROFIT` or `CUT_LOSS`
+- position is still open
+
+This prevents:
+- accidental live account closure
+- automatic trade entry
+- closing unlinked/manual-only records
+- repeated close attempts for already closed positions
+
+### Backend changes
+
+Pushed commit:
+
+```text
+39cee37 feat: auto-close IG demo forex trades
+```
+
+Updated config:
+
+```python
+enable_forex_auto_close: bool = False
+```
+
+Env flag:
+
+```env
+ENABLE_FOREX_AUTO_CLOSE=true
+```
+
+Updated `ForexPosition` model:
+- `ig_deal_id`
+- `ig_epic`
+- `ig_size`
+
+Updated DB migration:
+- Adds `ig_deal_id`
+- Adds `ig_epic`
+- Adds `ig_size`
+
+### IG linking flow
+
+When user taps **I took this practice trade**:
+
+1. Backend receives pair/direction/entry/stop/target/risk.
+2. Backend fetches open IG demo positions:
+   ```text
+   GET /positions
+   ```
+3. Backend searches for matching:
+   - IG EPIC for the pair
+   - matching direction:
+     - Hey Jimmy `LONG` maps to IG `BUY`
+     - Hey Jimmy `SHORT` maps to IG `SELL`
+4. Backend stores the newest matching open IG position:
+   - `dealId`
+   - `epic`
+   - `size`
+
+This means the user must:
+1. Open the trade manually in IG demo.
+2. Then tap **I took this practice trade** in Hey Jimmy.
+
+If no IG position is found, Hey Jimmy still tracks the practice trade but cannot auto-close it.
+
+### IG auto-close flow
+
+Forex monitor runs every 5 minutes.
+
+If a linked open forex position changes to `TAKE_PROFIT` or `CUT_LOSS`, backend calls:
+
+```text
+DELETE /positions/otc
+```
+
+Request uses:
+- `dealId`
+- opposite direction
+- market order
+- recorded IG size
+
+Direction mapping:
+
+```text
+IG BUY position  -> close with SELL
+IG SELL position -> close with BUY
+```
+
+Backend then:
+- marks Hey Jimmy forex position as `closed`
+- records `close_price`
+- records `realised_pnl`
+- sends push notification that IG demo auto-close was requested
+
+### Important limitation
+
+The app does **not** yet open IG trades.
+
+Correct usage:
+
+1. App says `LONG` or `SHORT`.
+2. User manually opens the trade in IG demo.
+3. User taps **I took this practice trade** in Hey Jimmy.
+4. Hey Jimmy links to the open IG demo position.
+5. Hey Jimmy auto-closes only when target/stop status fires.
+
+### Tests
+
+Focused backend tests passed:
+
+```text
+20 passed
+```
+
+Added test coverage:
+- forex practice signal summary
+- IG snapshot auth/market path
+- forex position open/close
+- IG deal linking
+- status-change notification
+- demo auto-close when target is hit
+
+### Linode deployment
+
+Deploy:
+
+```bash
+cd ~/flutterai/flutterai
+git pull --ff-only origin master
+cd trading_backend
+nano .env
+```
+
+Add:
+
+```env
+ENABLE_FOREX_AUTO_CLOSE=true
+```
+
+Restart:
+
+```bash
+sudo systemctl restart flutterai-backend.service
+sleep 3
+sudo journalctl -u flutterai-backend.service -n 60 --no-pager
+```
+
+Expected scheduler line still includes:
+
+```text
+forex_monitor=5m
+```
+
+### Next recommended work
+
+1. Add an `ig_linked` indicator to the app’s open forex trade card so user can see whether auto-close is armed.
+2. Add a warning if user taps **I took this practice trade** before opening the trade in IG.
+3. Add closed forex trade history.
+4. Add a test endpoint to verify IG open-position matching without exposing secrets.
+5. Add optional push when Hey Jimmy fails to link an IG position.
+
