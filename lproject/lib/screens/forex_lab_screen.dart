@@ -562,13 +562,13 @@ class _ForexPositionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final positive = (position.currentPnl ?? 0) >= 0;
-    final color = positive ? AppColors.green : AppColors.pink;
+    final statusColor = _statusColor(position.assistantStatus, positive);
     return Container(
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
+        border: Border.all(color: statusColor.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -585,9 +585,38 @@ class _ForexPositionTile extends StatelessWidget {
               const Spacer(),
               Text(
                 position.currentPnl == null ? 'Tracking' : '£${position.currentPnl!.toStringAsFixed(2)}',
-                style: GoogleFonts.dmSans(color: color, fontWeight: FontWeight.w700),
+                style: GoogleFonts.dmSans(color: statusColor, fontWeight: FontWeight.w700),
               ),
             ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: statusColor.withValues(alpha: 0.25)),
+            ),
+            child: Row(
+              children: [
+                Icon(_statusIcon(position.assistantStatus), color: statusColor, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_statusLabel(position.assistantStatus),
+                          style: GoogleFonts.dmSans(
+                              color: statusColor, fontWeight: FontWeight.w800, fontSize: 12)),
+                      const SizedBox(height: 2),
+                      Text(position.assistantMessage,
+                          style: GoogleFonts.dmSans(color: AppColors.textMuted, fontSize: 11)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 8),
           Row(
@@ -614,6 +643,52 @@ class _ForexPositionTile extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Color _statusColor(String status, bool positive) {
+    switch (status) {
+      case 'TAKE_PROFIT':
+      case 'PROTECT_PROFIT':
+        return AppColors.green;
+      case 'CUT_LOSS':
+        return AppColors.pink;
+      case 'HOLD_CAUTION':
+        return AppColors.orange;
+      default:
+        return positive ? AppColors.cyan : AppColors.textMuted;
+    }
+  }
+
+  IconData _statusIcon(String status) {
+    switch (status) {
+      case 'TAKE_PROFIT':
+        return Icons.flag_circle_outlined;
+      case 'PROTECT_PROFIT':
+        return Icons.shield_outlined;
+      case 'CUT_LOSS':
+        return Icons.warning_amber_rounded;
+      case 'HOLD_CAUTION':
+        return Icons.visibility_outlined;
+      default:
+        return Icons.timelapse;
+    }
+  }
+
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'TAKE_PROFIT':
+        return 'TAKE PROFIT';
+      case 'PROTECT_PROFIT':
+        return 'PROTECT PROFIT';
+      case 'CUT_LOSS':
+        return 'CUT LOSS';
+      case 'HOLD_CAUTION':
+        return 'HOLD WITH CAUTION';
+      case 'CLOSED':
+        return 'CLOSED';
+      default:
+        return 'HOLD';
+    }
   }
 }
 
@@ -898,6 +973,8 @@ class ForexPosition {
   final double? currentPrice;
   final double? currentPnl;
   final double? currentPnlPct;
+  final String assistantStatus;
+  final String assistantMessage;
 
   const ForexPosition({
     required this.id,
@@ -913,6 +990,8 @@ class ForexPosition {
     required this.currentPrice,
     required this.currentPnl,
     required this.currentPnlPct,
+    required this.assistantStatus,
+    required this.assistantMessage,
   });
 
   factory ForexPosition.fromJson(Map<String, dynamic> json) => ForexPosition(
@@ -929,5 +1008,7 @@ class ForexPosition {
         currentPrice: (json['current_price'] as num?)?.toDouble(),
         currentPnl: (json['current_pnl'] as num?)?.toDouble(),
         currentPnlPct: (json['current_pnl_pct'] as num?)?.toDouble(),
+        assistantStatus: json['assistant_status'] as String? ?? 'HOLD',
+        assistantMessage: json['assistant_message'] as String? ?? 'Trade is active.',
       );
 }

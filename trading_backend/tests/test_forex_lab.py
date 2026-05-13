@@ -111,6 +111,7 @@ def test_forex_position_can_be_opened_and_closed(client, monkeypatch):
     body = opened.json()
     assert body["status"] == "open"
     assert body["current_pnl"] == 50.0
+    assert body["assistant_status"] == "PROTECT_PROFIT"
 
     listed = client.get("/forex/positions", headers={"device-id": "forex-device"})
     assert listed.status_code == 200
@@ -125,3 +126,4 @@ def test_forex_position_can_be_opened_and_closed(client, monkeypatch):
     assert closed.status_code == 200
     assert closed.json()["status"] == "closed"
     assert closed.json()["realised_pnl"] == 60.0
+    assert closed.json()["assistant_status"] == "CLOSED"

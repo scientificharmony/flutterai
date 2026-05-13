@@ -42,6 +42,8 @@ class ForexPositionResponse(BaseModel):
     current_price: Optional[float]
     current_pnl: Optional[float]
     current_pnl_pct: Optional[float]
+    assistant_status: str
+    assistant_message: str
     close_price: Optional[float]
     realised_pnl: Optional[float]
     opened_at: datetime
@@ -57,9 +59,36 @@ def _calculate_pnl(pos: ForexPosition, price: Optional[float]) -> tuple[Optional
     return round(pnl, 2), round(pnl_pct, 3)
 
 
+def _assistant_guidance(pos: ForexPosition, price: Optional[float], pnl: Optional[float]) -> tuple[str, str]:
+    if pos.status == "closed":
+        return "CLOSED", "Practice trade is closed and realised P/L has been recorded."
+    if price is None:
+        return "WAIT", "Current IG price is unavailable. Do not act until price refreshes."
+
+    if pos.direction == "LONG":
+        hit_target = price >= pos.take_profit
+        hit_stop = price <= pos.stop_loss
+        target_progress = (price - pos.entry_price) / max(pos.take_profit - pos.entry_price, 0.0000001)
+    else:
+        hit_target = price <= pos.take_profit
+        hit_stop = price >= pos.stop_loss
+        target_progress = (pos.entry_price - price) / max(pos.entry_price - pos.take_profit, 0.0000001)
+
+    if hit_target:
+        return "TAKE_PROFIT", "Target reached. Consider closing the practice trade and banking the gain."
+    if hit_stop:
+        return "CUT_LOSS", "Stop reached. The trade idea is invalid; close or review immediately."
+    if pnl is not None and pnl > 0 and target_progress >= 0.6:
+        return "PROTECT_PROFIT", "Trade is well in profit. Watch for reversal or consider locking some gain."
+    if pnl is not None and pnl < 0:
+        return "HOLD_CAUTION", "Trade is currently against you but has not reached stop."
+    return "HOLD", "Trade is active. Hold while price remains between stop and target."
+
+
 def _to_response(pos: ForexPosition, current_price: Optional[float] = None) -> ForexPositionResponse:
     price = current_price if pos.status == "open" else pos.close_price
     pnl, pnl_pct = _calculate_pnl(pos, price)
+    assistant_status, assistant_message = _assistant_guidance(pos, price, pnl)
     return ForexPositionResponse(
         id=pos.id,
         pair=pos.pair,
@@ -74,6 +103,8 @@ def _to_response(pos: ForexPosition, current_price: Optional[float] = None) -> F
         current_price=round(price, 5) if price is not None else None,
         current_pnl=pnl,
         current_pnl_pct=pnl_pct,
+        assistant_status=assistant_status,
+        assistant_message=assistant_message,
         close_price=pos.close_price,
         realised_pnl=pos.realised_pnl,
         opened_at=pos.opened_at,
