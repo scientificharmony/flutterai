@@ -28,7 +28,9 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
   int _minStrength = 78;
   String _timeframe = '15m';
   ForexSummary? _summary;
+  List<ForexPosition> _positions = const [];
   bool _loading = true;
+  bool _savingTrade = false;
   String? _error;
 
   double get _balance => _summary?.demoBalance ?? 5000;
@@ -46,14 +48,23 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
       _error = null;
     });
     try {
-      final res = await http.get(
-        Uri.parse(ApiConfig.forexSummary),
-        headers: {'device-id': DeviceService.instance.deviceId},
-      );
+      final headers = {'device-id': DeviceService.instance.deviceId};
+      final results = await Future.wait([
+        http.get(Uri.parse(ApiConfig.forexSummary), headers: headers),
+        http.get(Uri.parse(ApiConfig.forexPositions), headers: headers),
+      ]);
+      final res = results[0];
+      final positionsRes = results[1];
       if (res.statusCode == 200) {
         final summary = ForexSummary.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+        final positions = positionsRes.statusCode == 200
+            ? (jsonDecode(positionsRes.body) as List)
+                .map((item) => ForexPosition.fromJson(item as Map<String, dynamic>))
+                .toList()
+            : <ForexPosition>[];
         setState(() {
           _summary = summary;
+          _positions = positions;
           _riskBps = summary.riskBps;
           _minStrength = summary.minSignalStrength;
         });
@@ -64,6 +75,48 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
       setState(() => _error = 'Forex backend unavailable.');
     } finally {
       setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _takePracticeTrade(ForexSignal signal) async {
+    if (signal.direction == 'NO_TRADE' || _savingTrade) return;
+    setState(() => _savingTrade = true);
+    try {
+      final res = await http.post(
+        Uri.parse(ApiConfig.forexPositions),
+        headers: {
+          'device-id': DeviceService.instance.deviceId,
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'pair': signal.pair,
+          'direction': signal.direction,
+          'entry_price': signal.entry,
+          'stop_loss': signal.stopLoss,
+          'take_profit': signal.takeProfit,
+          'risk_amount': signal.riskAmount,
+          'position_units': signal.positionUnits,
+          'timeframe': signal.timeframe,
+        }),
+      );
+      if (!mounted) return;
+      if (res.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${signal.pair} practice trade saved.')),
+        );
+        await _loadSummary();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not save practice trade (${res.statusCode}).')),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Forex backend unavailable.')),
+      );
+    } finally {
+      if (mounted) setState(() => _savingTrade = false);
     }
   }
 
@@ -79,9 +132,7 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
             icon: const Icon(Icons.refresh, size: 20),
             tooltip: 'Refresh',
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Forex data connector not enabled yet.')),
-              );
+              _loadSummary();
             },
           ),
         ],
@@ -107,6 +158,8 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
           const SizedBox(height: 12),
           _ConnectionPanel(summary: _summary),
           const SizedBox(height: 12),
+          _OpenForexPositions(positions: _positions),
+          const SizedBox(height: 12),
           Text('Practice signals',
               style: GoogleFonts.orbitron(
                   color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
@@ -121,7 +174,11 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
           else
             ...(_summary?.signals ?? []).map((signal) => Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: _SignalTile(signal: signal),
+                  child: _SignalTile(
+                    signal: signal,
+                    saving: _savingTrade,
+                    onTakeTrade: () => _takePracticeTrade(signal),
+                  ),
                 )),
           const SizedBox(height: 4),
           Text('Watchlist',
@@ -328,8 +385,14 @@ class _ConnectionPanel extends StatelessWidget {
 
 class _SignalTile extends StatelessWidget {
   final ForexSignal signal;
+  final bool saving;
+  final VoidCallback onTakeTrade;
 
-  const _SignalTile({required this.signal});
+  const _SignalTile({
+    required this.signal,
+    required this.saving,
+    required this.onTakeTrade,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -371,8 +434,126 @@ class _SignalTile extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(child: _Metric(label: 'Risk', value: '£${signal.riskAmount.toStringAsFixed(0)}')),
+              Expanded(child: _Metric(label: 'Units', value: signal.positionUnits.toString())),
+              Expanded(child: _Metric(label: 'R:R', value: signal.riskReward.toStringAsFixed(1))),
+            ],
+          ),
+          const SizedBox(height: 8),
           Text(signal.rationale,
               style: GoogleFonts.dmSans(color: AppColors.textMuted, fontSize: 12)),
+          if (signal.direction != 'NO_TRADE') ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: saving ? null : onTakeTrade,
+                icon: const Icon(Icons.add_chart, size: 17),
+                label: const Text('I took this practice trade'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: color,
+                  side: BorderSide(color: color.withValues(alpha: 0.45)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _OpenForexPositions extends StatelessWidget {
+  final List<ForexPosition> positions;
+
+  const _OpenForexPositions({required this.positions});
+
+  @override
+  Widget build(BuildContext context) {
+    final open = positions.where((pos) => pos.status == 'open').toList();
+    if (open.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.playlist_add_check, color: AppColors.textMuted, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text('No open forex practice trades',
+                  style: GoogleFonts.dmSans(color: AppColors.textMuted, fontSize: 12)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Open practice trades',
+            style: GoogleFonts.orbitron(
+                color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 10),
+        ...open.map((pos) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _ForexPositionTile(position: pos),
+            )),
+      ],
+    );
+  }
+}
+
+class _ForexPositionTile extends StatelessWidget {
+  final ForexPosition position;
+
+  const _ForexPositionTile({required this.position});
+
+  @override
+  Widget build(BuildContext context) {
+    final positive = (position.currentPnl ?? 0) >= 0;
+    final color = positive ? AppColors.green : AppColors.pink;
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(position.pair,
+                  style: GoogleFonts.orbitron(
+                      color: AppColors.textPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(width: 8),
+              _ModeBadge(label: position.direction, color: position.direction == 'LONG' ? AppColors.green : AppColors.pink),
+              const Spacer(),
+              Text(
+                position.currentPnl == null ? 'Tracking' : '£${position.currentPnl!.toStringAsFixed(2)}',
+                style: GoogleFonts.dmSans(color: color, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(child: _Metric(label: 'Entry', value: position.entryPrice.toStringAsFixed(5))),
+              Expanded(child: _Metric(label: 'Now', value: position.currentPrice?.toStringAsFixed(5) ?? '-')),
+              Expanded(child: _Metric(label: 'Risk', value: '£${position.riskAmount.toStringAsFixed(0)}')),
+            ],
+          ),
         ],
       ),
     );
@@ -612,6 +793,9 @@ class ForexSignal {
   final double entry;
   final double stopLoss;
   final double takeProfit;
+  final double riskReward;
+  final double riskAmount;
+  final int positionUnits;
   final String rationale;
 
   const ForexSignal({
@@ -622,6 +806,9 @@ class ForexSignal {
     required this.entry,
     required this.stopLoss,
     required this.takeProfit,
+    required this.riskReward,
+    required this.riskAmount,
+    required this.positionUnits,
     required this.rationale,
   });
 
@@ -633,6 +820,57 @@ class ForexSignal {
         entry: (json['entry'] as num).toDouble(),
         stopLoss: (json['stop_loss'] as num).toDouble(),
         takeProfit: (json['take_profit'] as num).toDouble(),
+        riskReward: (json['risk_reward'] as num).toDouble(),
+        riskAmount: (json['risk_amount'] as num).toDouble(),
+        positionUnits: (json['position_units'] as num).toInt(),
         rationale: json['rationale'] as String,
+      );
+}
+
+class ForexPosition {
+  final String id;
+  final String pair;
+  final String direction;
+  final double entryPrice;
+  final double stopLoss;
+  final double takeProfit;
+  final double riskAmount;
+  final int positionUnits;
+  final String timeframe;
+  final String status;
+  final double? currentPrice;
+  final double? currentPnl;
+  final double? currentPnlPct;
+
+  const ForexPosition({
+    required this.id,
+    required this.pair,
+    required this.direction,
+    required this.entryPrice,
+    required this.stopLoss,
+    required this.takeProfit,
+    required this.riskAmount,
+    required this.positionUnits,
+    required this.timeframe,
+    required this.status,
+    required this.currentPrice,
+    required this.currentPnl,
+    required this.currentPnlPct,
+  });
+
+  factory ForexPosition.fromJson(Map<String, dynamic> json) => ForexPosition(
+        id: json['id'] as String,
+        pair: json['pair'] as String,
+        direction: json['direction'] as String,
+        entryPrice: (json['entry_price'] as num).toDouble(),
+        stopLoss: (json['stop_loss'] as num).toDouble(),
+        takeProfit: (json['take_profit'] as num).toDouble(),
+        riskAmount: (json['risk_amount'] as num).toDouble(),
+        positionUnits: (json['position_units'] as num).toInt(),
+        timeframe: json['timeframe'] as String,
+        status: json['status'] as String,
+        currentPrice: (json['current_price'] as num?)?.toDouble(),
+        currentPnl: (json['current_pnl'] as num?)?.toDouble(),
+        currentPnlPct: (json['current_pnl_pct'] as num?)?.toDouble(),
       );
 }

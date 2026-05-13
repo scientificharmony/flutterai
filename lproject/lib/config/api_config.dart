@@ -24,4 +24,5 @@ class ApiConfig {
   static final String pieDeploy             = "$baseUrl/pie/deploy";
   static final String forexSummary          = "$baseUrl/forex/summary";
   static final String forexScan             = "$baseUrl/forex/scan";
+  static final String forexPositions        = "$baseUrl/forex/positions";
 }

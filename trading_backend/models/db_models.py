@@ -219,3 +219,25 @@ class OpenPosition(SQLModel, table=True):
     sell_alert_id: Optional[str] = None  # set when REVIEW_SELL alert fires
     opened_at: datetime = Field(default_factory=_utcnow)
     closed_at: Optional[datetime] = None
+
+
+# ── Forex Lab practice positions ──────────────────────────────────────────────
+
+class ForexPosition(SQLModel, table=True):
+    __tablename__ = "forex_positions"
+
+    id: str = Field(default_factory=_uid, primary_key=True)
+    user_id: str = Field(foreign_key="users.id", index=True)
+    pair: str = Field(index=True)
+    direction: str  # LONG | SHORT
+    entry_price: float
+    stop_loss: float
+    take_profit: float
+    risk_amount: float
+    position_units: int = Field(default=0)
+    timeframe: str = Field(default="15m")
+    status: str = Field(default="open")  # open | closed
+    close_price: Optional[float] = None
+    realised_pnl: Optional[float] = None
+    opened_at: datetime = Field(default_factory=_utcnow)
+    closed_at: Optional[datetime] = None

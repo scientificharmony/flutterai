@@ -16,6 +16,7 @@ def _run_migrations() -> None:
     _add_column_if_missing("trade_alerts", "what_is_this", "TEXT NOT NULL DEFAULT ''")
     _add_column_if_missing("trade_alerts", "sell_trigger", "TEXT")
     _add_column_if_missing("open_positions", "peak_price", "REAL")
+    _create_forex_positions_if_missing()
 
 
 def _add_column_if_missing(table: str, column: str, col_def: str) -> None:
@@ -31,6 +32,37 @@ def _add_column_if_missing(table: str, column: str, col_def: str) -> None:
                 logger.info("Migration: added %s.%s", table, column)
         except Exception as exc:
             logger.warning("Migration skipped %s.%s: %s", table, column, exc)
+
+
+def _create_forex_positions_if_missing() -> None:
+    """Create Forex Lab practice table for existing SQLite deployments."""
+    with Session(engine) as session:
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS forex_positions (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    pair TEXT NOT NULL,
+                    direction TEXT NOT NULL,
+                    entry_price REAL NOT NULL,
+                    stop_loss REAL NOT NULL,
+                    take_profit REAL NOT NULL,
+                    risk_amount REAL NOT NULL,
+                    position_units INTEGER NOT NULL DEFAULT 0,
+                    timeframe TEXT NOT NULL DEFAULT '15m',
+                    status TEXT NOT NULL DEFAULT 'open',
+                    close_price REAL,
+                    realised_pnl REAL,
+                    opened_at DATETIME NOT NULL,
+                    closed_at DATETIME,
+                    FOREIGN KEY(user_id) REFERENCES users (id)
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_forex_positions_user_id ON forex_positions (user_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_forex_positions_pair ON forex_positions (pair)"))
+            session.commit()
+        except Exception as exc:
+            logger.warning("Migration skipped forex_positions create: %s", exc)
 
 
 def get_session():

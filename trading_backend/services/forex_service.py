@@ -289,3 +289,11 @@ def get_forex_summary(timeframe: str = "15m", pairs: list[str] | None = None) ->
         pairs=selected_pairs,
         signals=signals,
     )
+
+
+def get_forex_mid_price(pair: str) -> float | None:
+    """Return the best available mid price for a pair without creating a signal."""
+    snapshots = _market_snapshots([pair])
+    if not snapshots:
+        return None
+    return snapshots[0].price

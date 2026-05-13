@@ -85,3 +85,43 @@ def test_forex_summary_uses_ig_snapshot_when_configured(monkeypatch):
     assert summary.account_type == "DEMO"
     assert summary.signals[0].entry == 1.0825
     assert "IG demo snapshot" in summary.signals[0].rationale
+
+
+def test_forex_position_can_be_opened_and_closed(client, monkeypatch):
+    from routers import forex_positions
+
+    monkeypatch.setattr(forex_positions, "get_forex_mid_price", lambda pair: 1.085)
+
+    opened = client.post(
+        "/forex/positions",
+        headers={"device-id": "forex-device"},
+        json={
+            "pair": "EUR/USD",
+            "direction": "LONG",
+            "entry_price": 1.08,
+            "stop_loss": 1.077,
+            "take_profit": 1.086,
+            "risk_amount": 50,
+            "position_units": 10000,
+            "timeframe": "15m",
+        },
+    )
+
+    assert opened.status_code == 200
+    body = opened.json()
+    assert body["status"] == "open"
+    assert body["current_pnl"] == 50.0
+
+    listed = client.get("/forex/positions", headers={"device-id": "forex-device"})
+    assert listed.status_code == 200
+    assert listed.json()[0]["pair"] == "EUR/USD"
+
+    closed = client.post(
+        f"/forex/positions/{body['id']}/close",
+        headers={"device-id": "forex-device"},
+        json={"close_price": 1.086},
+    )
+
+    assert closed.status_code == 200
+    assert closed.json()["status"] == "closed"
+    assert closed.json()["realised_pnl"] == 60.0
