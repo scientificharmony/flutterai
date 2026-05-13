@@ -4043,3 +4043,171 @@ forex_monitor=5m
 4. Add a test endpoint to verify IG open-position matching without exposing secrets.
 5. Add optional push when Hey Jimmy fails to link an IG position.
 
+---
+
+## 2026-05-13 — Forex Entry Setup Alerts
+
+### User request
+
+User clarified the desired full workflow:
+
+```text
+App notifies about a potential forex trade.
+User manually enters in IG demo.
+User taps "I took this practice trade".
+App monitors and handles TAKE_PROFIT / CUT_LOSS auto-close.
+```
+
+Before this change:
+- Forex Lab could show LONG/SHORT ideas when opened.
+- Forex Lab could track manually taken trades.
+- Backend could monitor status changes.
+- Backend could auto-close linked IG demo positions on target/stop.
+- But there was no scheduled push notification for new forex entry setups.
+
+### Backend implementation
+
+Pushed commit:
+
+```text
+56e3fc2 feat: send forex entry setup alerts
+```
+
+Added scheduled forex entry scanner:
+
+```text
+workers/forex_entry_scanner_job.py
+```
+
+Scheduler now includes:
+
+```text
+forex_entry=15m
+```
+
+Default config:
+
+```python
+enable_forex_entry_alerts: bool = True
+forex_entry_scan_minutes: int = 15
+forex_entry_cooldown_hours: int = 4
+```
+
+Env aliases:
+
+```env
+ENABLE_FOREX_ENTRY_ALERTS=true
+FOREX_ENTRY_SCAN_MINUTES=15
+FOREX_ENTRY_COOLDOWN_HOURS=4
+```
+
+### Entry alert flow
+
+Every 15 minutes:
+
+1. Backend pulls Forex Lab summary from IG demo snapshots.
+2. Filters for actionable signals:
+   - `LONG`
+   - `SHORT`
+   - strength >= `FOREX_MIN_SIGNAL_STRENGTH`
+3. Ignores `NO_TRADE`.
+4. Picks top actionable signal.
+5. Checks cooldown by:
+   - user
+   - pair
+   - direction
+6. Creates a `forex_entry_alerts` record.
+7. Sends push notification to user devices.
+
+Example push:
+
+```text
+Forex setup: EUR/USD SHORT
+Strength 82/100. Entry 1.17100, stop 1.17450, target 1.16400.
+Enter manually in IG demo, then tap I took this practice trade.
+```
+
+### New DB table
+
+Added:
+
+```text
+forex_entry_alerts
+```
+
+Fields:
+- `user_id`
+- `pair`
+- `direction`
+- `strength`
+- `timeframe`
+- `entry_price`
+- `stop_loss`
+- `take_profit`
+- `risk_amount`
+- `position_units`
+- `rationale`
+- `push_sent`
+- `created_at`
+
+Migration:
+- `database.py` creates `forex_entry_alerts` for existing SQLite deployments.
+
+### Current complete forex workflow
+
+Current intended Level 2 workflow:
+
+1. Backend scans forex every 15 minutes.
+2. If actionable, push notification is sent.
+3. User manually opens trade in IG demo.
+4. User taps **I took this practice trade** in Hey Jimmy.
+5. Backend links Hey Jimmy position to matching IG demo open position.
+6. Backend monitors open forex positions every 5 minutes.
+7. If status changes, push notification is sent.
+8. If status is `TAKE_PROFIT` or `CUT_LOSS`, and `ENABLE_FOREX_AUTO_CLOSE=true`, backend closes the linked IG demo position automatically.
+
+### Tests
+
+Focused backend tests passed:
+
+```text
+21 passed
+```
+
+Added test coverage:
+- forex setup push is created
+- setup push is sent
+- cooldown prevents repeat setup push
+
+### Linode deployment
+
+Deploy:
+
+```bash
+cd ~/flutterai/flutterai
+git pull --ff-only origin master
+cd trading_backend
+sudo systemctl restart flutterai-backend.service
+sleep 3
+sudo journalctl -u flutterai-backend.service -n 80 --no-pager
+```
+
+Expected scheduler startup includes:
+
+```text
+forex_entry=15m
+```
+
+### Standing note
+
+User requested:
+
+```text
+update chatgpt.md after every codebase change and implementation
+```
+
+Going forward in this thread:
+- after code changes are implemented and pushed, append a concise implementation note to `chatgpt.md`
+- include commit id, purpose, files/areas touched, deployment notes, and test result
+- commit and push the notes update
+
