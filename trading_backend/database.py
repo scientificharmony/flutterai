@@ -19,6 +19,9 @@ def _run_migrations() -> None:
     _create_forex_positions_if_missing()
     _add_column_if_missing("forex_positions", "last_assistant_status", "TEXT")
     _add_column_if_missing("forex_positions", "last_notified_status", "TEXT")
+    _add_column_if_missing("forex_positions", "ig_deal_id", "TEXT")
+    _add_column_if_missing("forex_positions", "ig_epic", "TEXT")
+    _add_column_if_missing("forex_positions", "ig_size", "REAL")
 
 
 def _add_column_if_missing(table: str, column: str, col_def: str) -> None:
@@ -52,6 +55,9 @@ def _create_forex_positions_if_missing() -> None:
                     risk_amount REAL NOT NULL,
                     position_units INTEGER NOT NULL DEFAULT 0,
                     timeframe TEXT NOT NULL DEFAULT '15m',
+                    ig_deal_id TEXT,
+                    ig_epic TEXT,
+                    ig_size REAL,
                     status TEXT NOT NULL DEFAULT 'open',
                     close_price REAL,
                     realised_pnl REAL,

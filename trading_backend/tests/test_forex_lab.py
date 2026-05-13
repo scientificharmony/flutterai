@@ -94,6 +94,7 @@ def test_forex_position_can_be_opened_and_closed(client, monkeypatch):
     from routers import forex_positions
 
     monkeypatch.setattr(forex_positions, "get_forex_mid_price", lambda pair: 1.085)
+    monkeypatch.setattr(forex_positions, "find_matching_ig_position", lambda pair, direction: None)
 
     opened = client.post(
         "/forex/positions",
@@ -130,6 +131,41 @@ def test_forex_position_can_be_opened_and_closed(client, monkeypatch):
     assert closed.json()["status"] == "closed"
     assert closed.json()["realised_pnl"] == 60.0
     assert closed.json()["assistant_status"] == "CLOSED"
+
+
+def test_forex_position_links_matching_ig_deal(client, monkeypatch):
+    from services.forex_service import IgOpenPosition
+    from routers import forex_positions
+
+    monkeypatch.setattr(forex_positions, "get_forex_mid_price", lambda pair: 1.085)
+    monkeypatch.setattr(
+        forex_positions,
+        "find_matching_ig_position",
+        lambda pair, direction: IgOpenPosition(
+            deal_id="DIAAAABBB",
+            epic="CS.D.EURUSD.CFD.IP",
+            direction="SELL",
+            size=1.0,
+        ),
+    )
+
+    opened = client.post(
+        "/forex/positions",
+        headers={"device-id": "forex-linked-device"},
+        json={
+            "pair": "EUR/USD",
+            "direction": "SHORT",
+            "entry_price": 1.08,
+            "stop_loss": 1.083,
+            "take_profit": 1.074,
+            "risk_amount": 50,
+            "position_units": 10000,
+            "timeframe": "15m",
+        },
+    )
+
+    assert opened.status_code == 200
+    assert opened.json()["ig_linked"] is True
 
 
 def test_forex_monitor_notifies_when_status_changes(db_engine, monkeypatch):
@@ -183,3 +219,59 @@ def test_forex_monitor_notifies_when_status_changes(db_engine, monkeypatch):
 
     assert sent
     assert "target reached" in sent[0][0].lower()
+
+
+def test_forex_monitor_auto_closes_demo_position(db_engine, monkeypatch):
+    from sqlmodel import Session
+    from models.db_models import ForexPosition, User
+    from workers import forex_position_monitor_job
+
+    closed = []
+
+    monkeypatch.setattr(forex_position_monitor_job.settings, "enable_forex_auto_close", True)
+    monkeypatch.setattr(forex_position_monitor_job.settings, "ig_account_type", "DEMO")
+    monkeypatch.setattr(forex_position_monitor_job.settings, "enable_push_notifications", False)
+    monkeypatch.setattr(forex_position_monitor_job, "engine", db_engine)
+    monkeypatch.setattr(forex_position_monitor_job, "get_forex_mid_price", lambda pair: 1.086)
+    monkeypatch.setattr(
+        forex_position_monitor_job,
+        "close_ig_position",
+        lambda deal_id, direction, size: closed.append((deal_id, direction, size)) or "REF123",
+    )
+
+    with Session(db_engine) as session:
+        user = User(device_id="forex-autoclose-user", plan="pro")
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        user_id = user.id
+        position = ForexPosition(
+            user_id=user_id,
+            pair="EUR/USD",
+            direction="LONG",
+            entry_price=1.08,
+            stop_loss=1.077,
+            take_profit=1.086,
+            risk_amount=50,
+            position_units=10000,
+            timeframe="15m",
+            ig_deal_id="DIAUTOCLOSE",
+            ig_epic="CS.D.EURUSD.CFD.IP",
+            ig_size=1.0,
+            last_assistant_status="HOLD",
+        )
+        session.add(position)
+        session.commit()
+
+    import asyncio
+
+    asyncio.run(forex_position_monitor_job.run_forex_position_monitoring())
+
+    with Session(db_engine) as session:
+        position = session.exec(
+            select(ForexPosition).where(ForexPosition.user_id == user_id)
+        ).first()
+        assert position.status == "closed"
+        assert position.realised_pnl == 60.0
+
+    assert ("DIAUTOCLOSE", "LONG", 1.0) in closed

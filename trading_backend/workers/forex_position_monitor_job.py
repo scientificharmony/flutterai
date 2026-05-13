@@ -7,6 +7,7 @@ from database import engine
 from models.db_models import DeviceToken, ForexPosition
 from routers.forex_positions import _calculate_pnl, assistant_guidance
 from services.forex_service import get_forex_mid_price
+from services.forex_service import close_ig_position
 from services.notification_service import send_to_user_devices
 
 logger = logging.getLogger(__name__)
@@ -67,7 +68,42 @@ def _check_position(pos: ForexPosition, session: Session) -> None:
                 session.add(pos)
                 logger.info("Forex monitor: push sent | pair=%s | status=%s", pos.pair, status)
 
+    if _should_auto_close(pos, status):
+        try:
+            close_ig_position(pos.ig_deal_id, pos.direction, pos.ig_size)
+            pos.status = "closed"
+            pos.close_price = current_price
+            pos.realised_pnl = pnl
+            pos.last_notified_status = status
+            logger.info("Forex monitor: IG demo auto-close sent | pair=%s | status=%s", pos.pair, status)
+            if settings.ENABLE_PUSH_NOTIFICATIONS:
+                tokens = session.exec(
+                    select(DeviceToken).where(DeviceToken.user_id == pos.user_id)
+                ).all()
+                if tokens:
+                    send_to_user_devices(
+                        [t.token for t in tokens],
+                        title=f"Forex auto-closed: {pos.pair}",
+                        body=f"{pos.direction} {pos.pair} closed in IG demo. P/L £{pnl:.2f}" if pnl is not None else f"{pos.direction} {pos.pair} closed in IG demo.",
+                        alert_id=pos.id,
+                        ticker=pos.pair,
+                        action_strength=100,
+                    )
+        except Exception as exc:
+            logger.warning("Forex monitor: IG demo auto-close failed | pair=%s | status=%s | error=%s", pos.pair, status, exc)
+
     session.commit()
+
+
+def _should_auto_close(pos: ForexPosition, status: str) -> bool:
+    return (
+        settings.ENABLE_FOREX_AUTO_CLOSE
+        and settings.IG_ACCOUNT_TYPE.upper() == "DEMO"
+        and status in {"TAKE_PROFIT", "CUT_LOSS"}
+        and pos.ig_deal_id is not None
+        and pos.ig_size is not None
+        and pos.status == "open"
+    )
 
 
 def _title_for_status(pos: ForexPosition, status: str) -> str:

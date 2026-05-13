@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     forex_demo_balance: float = 5000.0
     forex_risk_bps: int = 50
     forex_min_signal_strength: int = 78
+    enable_forex_auto_close: bool = False
     ig_api_key: str = ""
     ig_username: str = ""
     ig_password: str = ""
@@ -118,6 +119,8 @@ class Settings(BaseSettings):
     def FOREX_RISK_BPS(self) -> int: return self.forex_risk_bps
     @property
     def FOREX_MIN_SIGNAL_STRENGTH(self) -> int: return self.forex_min_signal_strength
+    @property
+    def ENABLE_FOREX_AUTO_CLOSE(self) -> bool: return self.enable_forex_auto_close
     @property
     def IG_API_KEY(self) -> str: return self.ig_api_key
     @property

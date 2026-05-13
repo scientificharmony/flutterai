@@ -53,6 +53,15 @@ class ForexMarketSnapshot:
     source: str
 
 
+@dataclass
+class IgOpenPosition:
+    deal_id: str
+    epic: str
+    direction: str
+    size: float
+    created_date: str | None = None
+
+
 _ig_session: IgSession | None = None
 _epic_cache: dict[str, str] = {}
 
@@ -187,6 +196,82 @@ def _ig_snapshot(pair: str, session: IgSession) -> ForexMarketSnapshot | None:
         market_status=snapshot.get("marketStatus"),
         source="ig",
     )
+
+
+def _position_direction_for_signal(direction: str) -> str:
+    return "BUY" if direction.upper() == "LONG" else "SELL"
+
+
+def _close_direction_for_position(direction: str) -> str:
+    return "SELL" if direction.upper() == "BUY" else "BUY"
+
+
+def get_ig_open_positions() -> list[IgOpenPosition]:
+    if not provider_connected():
+        return []
+    session = _get_ig_session()
+    response = httpx.get(
+        f"{_ig_base_url()}/positions",
+        headers=_ig_headers(version="2", session=session),
+        timeout=12.0,
+    )
+    response.raise_for_status()
+    positions = []
+    for item in response.json().get("positions", []):
+        position = item.get("position", {})
+        market = item.get("market", {})
+        deal_id = position.get("dealId")
+        epic = market.get("epic") or position.get("epic")
+        direction = position.get("direction")
+        size = position.get("size")
+        if deal_id and epic and direction and size is not None:
+            positions.append(
+                IgOpenPosition(
+                    deal_id=deal_id,
+                    epic=epic,
+                    direction=str(direction).upper(),
+                    size=float(size),
+                    created_date=position.get("createdDate") or position.get("createdDateUTC"),
+                )
+            )
+    return positions
+
+
+def find_matching_ig_position(pair: str, direction: str) -> IgOpenPosition | None:
+    if not provider_connected():
+        return None
+    session = _get_ig_session()
+    epic = _search_ig_epic(pair, session)
+    if not epic:
+        return None
+    expected_direction = _position_direction_for_signal(direction)
+    matches = [
+        pos for pos in get_ig_open_positions()
+        if pos.epic == epic and pos.direction == expected_direction
+    ]
+    if not matches:
+        return None
+    return sorted(matches, key=lambda pos: pos.created_date or "", reverse=True)[0]
+
+
+def close_ig_position(deal_id: str, direction: str, size: float) -> str:
+    if settings.IG_ACCOUNT_TYPE.upper() != "DEMO":
+        raise RuntimeError("IG auto-close is only allowed for DEMO accounts")
+    session = _get_ig_session()
+    response = httpx.request(
+        "DELETE",
+        f"{_ig_base_url()}/positions/otc",
+        headers=_ig_headers(version="1", session=session),
+        json={
+            "dealId": deal_id,
+            "direction": _close_direction_for_position(direction),
+            "orderType": "MARKET",
+            "size": size,
+        },
+        timeout=12.0,
+    )
+    response.raise_for_status()
+    return response.json().get("dealReference", "")
 
 
 def _market_snapshots(pairs: list[str]) -> list[ForexMarketSnapshot]:

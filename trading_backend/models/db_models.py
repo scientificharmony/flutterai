@@ -236,6 +236,9 @@ class ForexPosition(SQLModel, table=True):
     risk_amount: float
     position_units: int = Field(default=0)
     timeframe: str = Field(default="15m")
+    ig_deal_id: Optional[str] = None
+    ig_epic: Optional[str] = None
+    ig_size: Optional[float] = None
     status: str = Field(default="open")  # open | closed
     close_price: Optional[float] = None
     realised_pnl: Optional[float] = None

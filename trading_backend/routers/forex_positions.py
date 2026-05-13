@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 from auth import get_current_user
 from database import get_session
 from models.db_models import ForexPosition, User
-from services.forex_service import get_forex_mid_price
+from services.forex_service import find_matching_ig_position, get_forex_mid_price
 
 router = APIRouter(prefix="/forex/positions", tags=["forex"])
 
@@ -39,6 +39,7 @@ class ForexPositionResponse(BaseModel):
     position_units: int
     timeframe: str
     status: str
+    ig_linked: bool
     current_price: Optional[float]
     current_pnl: Optional[float]
     current_pnl_pct: Optional[float]
@@ -100,6 +101,7 @@ def _to_response(pos: ForexPosition, current_price: Optional[float] = None) -> F
         position_units=pos.position_units,
         timeframe=pos.timeframe,
         status=pos.status,
+        ig_linked=bool(pos.ig_deal_id),
         current_price=round(price, 5) if price is not None else None,
         current_pnl=pnl,
         current_pnl_pct=pnl_pct,
@@ -136,6 +138,12 @@ def open_forex_position(
     if direction not in {"LONG", "SHORT"}:
         raise HTTPException(status_code=422, detail="direction must be LONG or SHORT.")
 
+    ig_position = None
+    try:
+        ig_position = find_matching_ig_position(body.pair, direction)
+    except Exception:
+        ig_position = None
+
     pos = ForexPosition(
         user_id=user.id,
         pair=body.pair,
@@ -146,6 +154,9 @@ def open_forex_position(
         risk_amount=body.risk_amount,
         position_units=body.position_units,
         timeframe=body.timeframe,
+        ig_deal_id=ig_position.deal_id if ig_position else None,
+        ig_epic=ig_position.epic if ig_position else None,
+        ig_size=ig_position.size if ig_position else None,
     )
     session.add(pos)
     session.commit()
