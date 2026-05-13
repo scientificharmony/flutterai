@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from typing import Optional
 
@@ -9,6 +10,7 @@ from models.schemas import ClaudeRecommendation
 from services.formula_engine import ScoredCandidate
 
 _client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+logger = logging.getLogger(__name__)
 
 _FORBIDDEN_PATTERNS = re.compile(
     r"\b(guaranteed|safe profit|can't lose|risk.?free|buy now|sell now|definitely|probability of success|success chance|moon|rocket)\b",
@@ -39,6 +41,18 @@ Output schema:
   "risks": ["Plain-English risk 1", "Plain-English risk 2"],
   "contradiction_notes": []
 }"""
+
+
+def _system_prompt_payload():
+    if not settings.ENABLE_CLAUDE_PROMPT_CACHE:
+        return _SYSTEM_PROMPT
+    return [
+        {
+            "type": "text",
+            "text": _SYSTEM_PROMPT,
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
 
 
 def _build_user_message(
@@ -114,10 +128,16 @@ async def analyse_candidates(
     valid_tickers = {c.ticker.upper() for c in candidates}
 
     try:
+        logger.info(
+            "Claude analysis requested | model=%s | candidates=%d | max_tokens=%d",
+            settings.CLAUDE_MODEL,
+            len(candidates),
+            settings.CLAUDE_MAX_TOKENS,
+        )
         response = _client.messages.create(
             model=settings.CLAUDE_MODEL,
-            max_tokens=800,
-            system=_SYSTEM_PROMPT,
+            max_tokens=settings.CLAUDE_MAX_TOKENS,
+            system=_system_prompt_payload(),
             messages=[{"role": "user", "content": user_message}],
         )
         data = json.loads(_strip_fences(response.content[0].text))

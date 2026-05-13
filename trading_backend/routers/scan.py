@@ -297,7 +297,7 @@ async def manual_scan(
         price_at_alert=top.current_price,
         alert_title=alert_title,
         alert_body=alert_body,
-        what_is_this=rec.what_is_this,
+        what_is_this=getattr(rec, "what_is_this", ""),
         rationale=rec.plain_english_summary,
         risk_note="Always review the chart yourself before buying. This app does not place trades.",
         key_factors=rec.key_factors,

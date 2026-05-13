@@ -13,7 +13,9 @@ _CACHE_TTL_SECONDS = 300  # 5 minutes
 # LSE-listed ETFs that Yahoo Finance requires a .L suffix for.
 # Keyed by the bare ticker used everywhere else in the app.
 _LSE_TICKERS: set[str] = {
-    "VUAG", "VWRP", "SWDA", "CSP1", "CNDX", "ISF", "VEVE",
+    "ATT", "CNDX", "CNX1", "CSP1", "EIMI", "EQGB", "EXS1", "HMCH", "IGLT",
+    "IITU", "IJPA", "ISF", "IUFS", "MEUD", "RBOT", "SGLN", "SMT", "SWDA",
+    "VEUR", "VEVE", "VFEM", "VMID", "VUAG", "VUKE", "VWRP", "XDWH",
 }
 
 # T212 tickers whose Yahoo Finance symbol differs from ticker + ".L".
@@ -32,6 +34,7 @@ _YF_OVERRIDES: dict[str, str] = {
     "INRGL": "INRG.L",   # T212 INRGL_EQ  → Yahoo INRG.L
     "INRGS": "INRG.L",   # T212 INRGS_EQ  → Yahoo INRG.L
     "IITUL": "IITU.L",   # T212 IITUL_EQ  → Yahoo IITU.L (if exists)
+    "2B76": "2B76.DE",    # Xetra-listed WisdomTree/Rize thematic instrument
 }
 
 

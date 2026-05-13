@@ -3,7 +3,7 @@ Private test dashboard — GET /test/performance-summary
 Only accessible in APP_MODE=private_test.
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
@@ -11,7 +11,7 @@ from sqlmodel import Session, select
 from auth import get_current_user
 from config import settings
 from database import get_session
-from models.db_models import User, SignalPerformance
+from models.db_models import DeviceToken, OpenPosition, SignalPerformance, Strategy, User, UserSettings
 from models.schemas import (
     DailyUsageSummary,
     PerformanceSummary,
@@ -22,6 +22,15 @@ from services.budget_service import get_or_create_usage, budget_remaining
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/test", tags=["test-dashboard"])
+
+
+def _quiet_hours_active(user_settings: UserSettings | None) -> bool:
+    start = user_settings.quiet_hours_start if user_settings else settings.quiet_hours_start
+    end = user_settings.quiet_hours_end if user_settings else settings.quiet_hours_end
+    hour = datetime.now(timezone.utc).hour
+    if start < end:
+        return start <= hour < end
+    return hour >= start or hour < end
 
 
 def _perf_to_response(p: SignalPerformance) -> SignalPerformanceResponse:
@@ -161,3 +170,50 @@ def performance_summary(
         today_usage=today_usage,
         recent_signals=recent,
     )
+
+
+@router.get("/notification-diagnostics")
+def notification_diagnostics(
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    if not settings.is_private_test:
+        raise HTTPException(status_code=403, detail="Diagnostics only available in private_test mode.")
+
+    strategies = session.exec(
+        select(Strategy).where(Strategy.user_id == user.id)
+    ).all()
+    enabled_strategies = [strategy for strategy in strategies if strategy.enabled]
+    tokens = session.exec(
+        select(DeviceToken).where(DeviceToken.user_id == user.id)
+    ).all()
+    user_settings = session.exec(
+        select(UserSettings).where(UserSettings.user_id == user.id)
+    ).first()
+    open_positions = session.exec(
+        select(OpenPosition).where(
+            OpenPosition.user_id == user.id,
+            OpenPosition.status == "open",
+        )
+    ).all()
+    today_usage = get_or_create_usage(user.id, session)
+
+    return {
+        "push_enabled": settings.ENABLE_PUSH_NOTIFICATIONS,
+        "firebase_credentials_configured": bool(settings.FIREBASE_SERVICE_ACCOUNT_PATH),
+        "registered_device_tokens": len(tokens),
+        "quiet_hours_active": _quiet_hours_active(user_settings),
+        "quiet_hours_start_utc": user_settings.quiet_hours_start if user_settings else settings.quiet_hours_start,
+        "quiet_hours_end_utc": user_settings.quiet_hours_end if user_settings else settings.quiet_hours_end,
+        "strategies_total": len(strategies),
+        "strategies_enabled": len(enabled_strategies),
+        "enabled_strategy_ids": [strategy.id for strategy in enabled_strategies],
+        "enabled_strategy_watchlists": {
+            strategy.id: strategy.watchlist for strategy in enabled_strategies
+        },
+        "open_positions": len(open_positions),
+        "today_claude_calls": today_usage.claude_calls,
+        "today_alerts_sent": today_usage.alerts_sent,
+        "daily_alert_limit": settings.MAX_ALERTS_PER_DAY,
+        "min_push_action_strength": settings.MIN_PUSH_ACTION_STRENGTH,
+    }

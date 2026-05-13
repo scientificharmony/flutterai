@@ -20,6 +20,12 @@ def _pct_change(price_now: float, price_then: float) -> float:
     return round((price_now - price_then) / price_then * 100, 4)
 
 
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def run_outcome_check() -> None:
     now = datetime.now(timezone.utc)
     with Session(engine) as session:
@@ -31,7 +37,7 @@ def run_outcome_check() -> None:
         ).all()
 
         for outcome, alert in outcomes:
-            age = now - alert.created_at
+            age = now - _as_utc(alert.created_at)
             price_now = get_current_price(alert.ticker)
             if price_now is None:
                 continue

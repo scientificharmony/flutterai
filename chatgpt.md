@@ -3253,3 +3253,219 @@ This session implemented the full beginner trading loop: clear BUY alerts with p
 | `overbought` | RSI14 > 75 AND currently in profit |
 | `stale` | Open >= 14 days AND abs(gain) < 1% |
 
+---
+
+## Session — Push Notification Debugging, Scheduled Strategy Setup & Budget Optimisation
+
+### Date
+2026-05-13
+
+### User problem
+Expected push notifications during the day, but none arrived from the live server at `172.237.116.65`.
+
+### Live server findings
+
+Confirmed backend health:
+```json
+{"status":"ok","claude_configured":true,"trading212_configured":true,"mode":"demo"}
+```
+
+Confirmed FCM push pipeline works:
+```json
+{"tokens_found":5,"sent":1}
+```
+
+Phone received the test push, so the missing daily notifications were not caused by Firebase, FCM, phone permissions, or token registration.
+
+Performance summary showed no activity for 2026-05-13:
+```json
+"today_usage":{"date":"2026-05-13","claude_calls":0,"alerts_sent":0}
+```
+
+Root cause:
+```sql
+select id,user_id,name,enabled,watchlist,min_confidence,min_signal_score,last_scanned_at from strategies;
+```
+returned no rows. The scheduler was running every 15 minutes, but there were no enabled `Strategy` records to scan.
+
+### Live DB action taken
+
+Found private test user:
+```text
+a16610ae-97d3-4e32-900a-3b0e38d03314|chris|pro
+```
+
+Created scheduled strategy:
+```sql
+insert into strategies (
+  id,user_id,name,watchlist,min_confidence,min_signal_score,enabled,scan_interval_minutes
+) values (
+  'private-etf-scanner',
+  'a16610ae-97d3-4e32-900a-3b0e38d03314',
+  'Private ETF scanner',
+  '["VUSAL","VUAG","VWRP","VHYLL","IITU","EQQQL","INRGL","SWDA","CSP1","CNDX"]',
+  65,
+  65,
+  1,
+  15
+);
+```
+
+Later expanded to a 30-ticker test universe while keeping high-confidence push threshold at 75:
+```json
+["VWRP","SWDA","VUAG","VUSAL","CSP1","CNDX","IITU","EQQQL","CNX1","EQGB","SMT","ATT","VHYLL","IGLT","SGLN","ISF","VUKE","VMID","VEUR","MEUD","EXS1","EIMI","VFEM","HMCH","IJPA","INRGL","XDWH","IUFS","2B76","RBOT"]
+```
+
+Rationale:
+- Keep `MIN_PUSH_ACTION_STRENGTH=75` for high-confidence manual review alerts.
+- Increase market coverage from 10 to 30 instruments.
+- Do not reduce threshold just to create more notifications.
+
+### Live logs after strategy creation
+
+Scheduler reached the scan and called Claude:
+```text
+HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+```
+
+Then failed with timezone bug:
+```text
+Strategy scan failed for private-etf-scanner: can't compare offset-naive and offset-aware datetimes
+```
+
+Also saw many Yahoo Finance lookup errors because several bare LSE/T212 tickers require Yahoo `.L` or other mapped symbols:
+```text
+$IITU: possibly delisted; no price data found
+$CNX1: possibly delisted; no price data found
+$IGLT: possibly delisted; no price data found
+```
+
+### Local code fixes implemented
+
+#### Budget / Claude cost optimisation
+
+Updated `trading_backend/config.py`:
+```python
+claude_max_tokens: int = 550
+claude_max_candidates: int = 3
+enable_claude_prompt_cache: bool = True
+scheduled_min_formula_score_for_claude: int = 70
+```
+
+Current scanner model remains:
+```text
+claude-3-5-sonnet-20241022
+```
+
+Optimisation behavior:
+- Formula engine scans watchlist first.
+- Trading 212 validation filters invalid/non-Invest instruments.
+- Scheduled scanner skips Claude if top formula score is below 70.
+- Claude receives at most `CLAUDE_MAX_CANDIDATES` candidates.
+- Claude output cap reduced from 800 to 550 tokens.
+- Claude prompt caching enabled for static system prompt/rules.
+- Logs now show model, candidate count, and token cap for each Claude request.
+
+#### Scheduled scanner diagnostics
+
+Updated `trading_backend/workers/scanner_job.py`:
+- Logs disabled/missing strategy.
+- Logs missing user.
+- Logs outside market hours.
+- Logs quiet hours.
+- Logs exhausted quota.
+- Logs empty watchlist.
+- Logs duplicate ticker cooldown.
+- Logs `SCHEDULED SCAN no-claude` when formula score is below the Claude gate.
+- Logs `SCHEDULED SCAN no-action` with:
+  - ticker
+  - formula score
+  - Claude confidence
+  - action strength
+  - action
+  - flags / reason
+- ETF scheduled scans now use `portfolio_fit_score=70`, matching manual ETF treatment better.
+
+#### Timezone crash fixes
+
+Updated `trading_backend/workers/scanner_job.py`:
+- `_data_is_stale()` now normalises naive timestamps to UTC before comparing.
+
+Updated `trading_backend/workers/outcome_job.py`:
+- Added `_as_utc()` helper.
+- Fixes hourly crash:
+```text
+TypeError: can't subtract offset-naive and offset-aware datetimes
+```
+
+#### Yahoo Finance ticker mapping
+
+Updated `trading_backend/services/market_data.py`:
+- Expanded `_LSE_TICKERS` to include the 30-ticker test universe where Yahoo expects `.L`.
+- Added override:
+```python
+"2B76": "2B76.DE"
+```
+
+This should reduce noisy false “possibly delisted” errors for LSE instruments.
+
+#### Push accuracy fix
+
+Updated `trading_backend/workers/holding_tracker_job.py`:
+- `sell_alert.push_sent = True` is now set only if at least one FCM send succeeds.
+
+#### Private diagnostics endpoint
+
+Added `GET /test/notification-diagnostics` in `trading_backend/routers/test_dashboard.py`.
+
+Reports:
+- `push_enabled`
+- `firebase_credentials_configured`
+- `registered_device_tokens`
+- `quiet_hours_active`
+- quiet hour window
+- total strategies
+- enabled strategies
+- enabled strategy ids
+- enabled strategy watchlists
+- open positions
+- today Claude calls
+- today alerts sent
+- daily alert limit
+- min push action strength
+
+Private-test only; blocked outside `APP_MODE=private_test`.
+
+#### Manual scan robustness
+
+Updated `trading_backend/routers/scan.py`:
+- Uses `getattr(rec, "what_is_this", "")` so older/mocked Claude result shapes do not crash alert creation.
+
+### Tests
+
+Full backend suite passed locally:
+```text
+114 passed
+```
+
+### Current recommended deployment steps
+
+After pushing local code:
+```bash
+cd ~/flutterai/flutterai/trading_backend
+git pull
+sudo systemctl restart flutterai-backend.service
+sudo journalctl -u flutterai-backend.service -f
+```
+
+Expected next scan result should be one clean outcome:
+```text
+SCHEDULED SCAN alert_created | strategy=private-etf-scanner | ticker=... | score=... | claude_conf=... | action_strength=...
+```
+or:
+```text
+SCHEDULED SCAN no-action | strategy=private-etf-scanner | ticker=... | formula_score=... | claude_conf=... | action_strength=... | flags=...
+```
+
+If timezone error still appears, Linode did not pull the latest patch.
+

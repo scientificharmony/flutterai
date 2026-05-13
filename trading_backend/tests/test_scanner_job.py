@@ -2,6 +2,10 @@
 Tests for the scheduled scanner job (workers/scanner_job.py).
 Validates the modern Action Strength pipeline with correct percentage math,
 Invest-only validation, and no obsolete Claude field access.
+
+After tightening rules:
+- Only actionable alerts (BUY_REVIEW / REVIEW_SELL with executable=true) are persisted.
+- WATCH, DO_NOT_ACT, and validation-failed scans are logged but not stored as TradeAlert rows.
 """
 import asyncio
 from unittest.mock import patch, AsyncMock
@@ -170,9 +174,9 @@ def test_creates_trade_alert_with_action_strength_fields(db_engine):
         assert "not a guarantee" in alert.action_strength_disclaimer
         assert alert.trading212_review_enabled is True
         assert alert.executable is True
-        assert alert.alert_title == "Potential Invest setup: AAPL"
-        assert "Action Strength 76/100" in alert.alert_body
-        assert alert.risk_note == "Manual review required before any trade."
+        assert alert.alert_title == "AAPL looks like a good time to buy"
+        assert alert.alert_body == "Tap to see why — takes 30 seconds to review."
+        assert alert.risk_note == "Always review the chart yourself before buying. This app does not place trades."
         assert alert.key_factors == ["Factor 1"]
         assert alert.blocking_risks == ["Risk 1"]
         assert alert.safety_flags == []
@@ -233,7 +237,7 @@ def test_creates_signal_performance(db_engine):
 
 
 def test_no_push_when_review_disabled(db_engine):
-    """WATCH alerts must never trigger push notifications."""
+    """WATCH alerts must never trigger push notifications, and must NOT be persisted."""
     _clean_scan_tables(db_engine)
     strategy_id, user_id = _create_strategy(db_engine)
 
@@ -252,14 +256,13 @@ def test_no_push_when_review_disabled(db_engine):
 
     with Session(db_engine) as session:
         alert = session.exec(select(TradeAlert).where(TradeAlert.user_id == user_id)).first()
-        assert alert is not None
-        assert alert.action == "WATCH"
-        assert alert.trading212_review_enabled is False
+        assert alert is None
 
     mock_push.assert_not_called()
 
 
 def test_watch_when_formula_score_low(db_engine):
+    """Low formula score → WATCH → no alert persisted."""
     _clean_scan_tables(db_engine)
     strategy_id, user_id = _create_strategy(db_engine)
 
@@ -277,13 +280,34 @@ def test_watch_when_formula_score_low(db_engine):
 
     with Session(db_engine) as session:
         alert = session.exec(select(TradeAlert).where(TradeAlert.user_id == user_id)).first()
-        assert alert is not None
-        assert alert.action == "WATCH"
-        assert alert.trading212_review_enabled is False
-        assert "Formula score below 70." in alert.safety_flags
+        assert alert is None
+
+
+def test_formula_score_below_claude_gate_skips_claude(db_engine):
+    """Scheduled scans must not spend Claude calls on candidates that cannot pass formula gate."""
+    _clean_scan_tables(db_engine)
+    strategy_id, user_id = _create_strategy(db_engine, min_signal_score=65.0)
+
+    with patch("workers.scanner_job.engine", db_engine):
+        with patch("workers.scanner_job.trading212_service.fetch_balance", new=AsyncMock(return_value=1000.0)), \
+             patch("workers.scanner_job.trading212_service.validate_invest_instrument", new=AsyncMock(return_value=(True, "STOCK"))), \
+             patch("workers.scanner_job.scan_watchlist", return_value=[_make_candidate(score=68.0)]), \
+             patch("workers.scanner_job.claude_service.analyse_candidates", new=AsyncMock(return_value=_make_claude_rec(confidence=80))) as mock_claude, \
+             patch("workers.scanner_job.can_call_claude", return_value=(True, "")), \
+             patch("workers.scanner_job._is_market_hours", return_value=True), \
+             patch("workers.scanner_job._in_quiet_hours", return_value=False):
+
+            asyncio.run(run_strategy_scan(strategy_id))
+
+    with Session(db_engine) as session:
+        alert = session.exec(select(TradeAlert).where(TradeAlert.user_id == user_id)).first()
+        assert alert is None
+
+    mock_claude.assert_not_called()
 
 
 def test_watch_when_claude_confidence_low(db_engine):
+    """Claude confidence below strategy threshold → WATCH → no alert persisted."""
     _clean_scan_tables(db_engine)
     strategy_id, user_id = _create_strategy(db_engine, min_confidence=75)
 
@@ -301,14 +325,11 @@ def test_watch_when_claude_confidence_low(db_engine):
 
     with Session(db_engine) as session:
         alert = session.exec(select(TradeAlert).where(TradeAlert.user_id == user_id)).first()
-        assert alert is not None
-        assert alert.action == "WATCH"
-        assert alert.trading212_review_enabled is False
-        assert "Claude confidence below 75." in alert.safety_flags
+        assert alert is None
 
 
 def test_watch_when_action_strength_low(db_engine):
-    """formula=70, claude=70 → action_strength=67 < 70 → WATCH."""
+    """formula=70, claude=70 → action_strength=67 < 70 → WATCH → no alert persisted."""
     _clean_scan_tables(db_engine)
     strategy_id, user_id = _create_strategy(db_engine)
 
@@ -326,13 +347,11 @@ def test_watch_when_action_strength_low(db_engine):
 
     with Session(db_engine) as session:
         alert = session.exec(select(TradeAlert).where(TradeAlert.user_id == user_id)).first()
-        assert alert is not None
-        assert alert.action == "WATCH"
-        assert alert.trading212_review_enabled is False
-        assert "Action Strength below 70." in alert.safety_flags
+        assert alert is None
 
 
 def test_do_not_act_when_stale_data(db_engine):
+    """Stale data → DO_NOT_ACT → no alert persisted."""
     _clean_scan_tables(db_engine)
     strategy_id, user_id = _create_strategy(db_engine)
 
@@ -350,13 +369,11 @@ def test_do_not_act_when_stale_data(db_engine):
 
     with Session(db_engine) as session:
         alert = session.exec(select(TradeAlert).where(TradeAlert.user_id == user_id)).first()
-        assert alert is not None
-        assert alert.action == "DO_NOT_ACT"
-        assert "Data stale." in alert.safety_flags
-        assert alert.trading212_review_enabled is False
+        assert alert is None
 
 
 def test_buy_review_when_all_thresholds_pass(db_engine):
+    """All thresholds pass → BUY_REVIEW alert persisted with correct fields."""
     _clean_scan_tables(db_engine)
     strategy_id, user_id = _create_strategy(db_engine)
 

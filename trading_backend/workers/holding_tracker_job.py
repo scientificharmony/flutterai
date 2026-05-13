@@ -137,7 +137,7 @@ async def _check_position(pos: OpenPosition, session: Session) -> None:
             select(DeviceToken).where(DeviceToken.user_id == pos.user_id)
         ).all()
         if tokens:
-            send_to_user_devices(
+            sent = send_to_user_devices(
                 [t.token for t in tokens],
                 title=signal.title,
                 body=signal.body,
@@ -145,9 +145,10 @@ async def _check_position(pos: OpenPosition, session: Session) -> None:
                 ticker=pos.ticker,
                 action_strength=80,
             )
-            sell_alert.push_sent = True
-            session.add(sell_alert)
-            session.commit()
+            if sent:
+                sell_alert.push_sent = True
+                session.add(sell_alert)
+                session.commit()
 
 
 def _rationale(trigger: str, ticker: str, gain_pct: float, current: float, entry: float) -> str:

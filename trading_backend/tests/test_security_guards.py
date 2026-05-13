@@ -9,6 +9,7 @@ from config import settings
 from database import get_session
 from models.db_models import SignalPerformance, TradeAlert, User
 from routers import admin
+from routers import test_dashboard
 from services import notification_service
 
 
@@ -103,6 +104,33 @@ def test_private_mode_allows_missing_device_id(client):
     response = client.get("/alerts")
 
     assert response.status_code == 200
+
+
+def test_notification_diagnostics_private_mode(client, db_engine):
+    settings.app_mode = "private_test"
+
+    response = client.get("/test/notification-diagnostics")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["registered_device_tokens"] == 0
+    assert body["strategies_enabled"] == 0
+    assert body["daily_alert_limit"] == settings.MAX_ALERTS_PER_DAY
+
+
+def test_notification_diagnostics_blocked_outside_private_mode(db_engine):
+    settings.app_mode = "public"
+    app = FastAPI()
+    app.include_router(test_dashboard.router)
+    app.dependency_overrides[get_session] = _override_session(db_engine)
+
+    with TestClient(app) as public_client:
+        response = public_client.get(
+            "/test/notification-diagnostics",
+            headers={"device-id": "phone-1"},
+        )
+
+    assert response.status_code == 403
 
 
 def test_public_mode_requires_device_id(client):

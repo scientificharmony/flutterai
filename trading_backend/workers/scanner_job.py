@@ -99,6 +99,8 @@ def _data_is_stale(ticker: str) -> bool:
     ts = get_data_timestamp(ticker)
     if ts is None:
         return True
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
     return ts < (datetime.now(timezone.utc) - timedelta(days=3))
 
 
@@ -115,10 +117,10 @@ def _suggested_amount_for(action: str, executable: bool, max_trade_amount: float
 async def _pick_top_candidate(
     candidates: list,
     mission: str | None,
-) -> tuple[object | None, list[object], list[str], str]:
+) -> tuple[object | None, list[object], list[str], str, dict[str, str]]:
     """
     Pick the best actionable candidate respecting mission constraints.
-    Returns (candidate_or_None, validated_candidates, safety_flags, status_message).
+    Returns (candidate_or_None, validated_candidates, safety_flags, status_message, inst_type_map).
     """
     safety_flags: list[str] = []
     wants_etf = mission_requests_etf(mission)
@@ -139,12 +141,12 @@ async def _pick_top_candidate(
         validated.append({"candidate": c, "type": inst_type})
 
     if not validated:
-        return None, [], safety_flags, "No Trading 212 Invest validated candidates found."
+        return None, [], safety_flags, "No Trading 212 Invest validated candidates found.", {}
 
     if wants_etf:
         etf_only = [v for v in validated if v["type"] == "ETF"]
         if not etf_only:
-            return None, [], safety_flags + ["Explicit ETF mission: no valid ETF candidates available."], "No valid ETF candidates for this mission."
+            return None, [], safety_flags + ["Explicit ETF mission: no valid ETF candidates available."], "No valid ETF candidates for this mission.", {}
         validated = etf_only
 
     if wants_lower_risk and not wants_etf:
@@ -154,7 +156,8 @@ async def _pick_top_candidate(
 
     top = validated[0]["candidate"]
     validated_candidates = [v["candidate"] for v in validated]
-    return top, validated_candidates, safety_flags, ""
+    inst_type_map = {v["candidate"].ticker.upper(): v["type"] for v in validated}
+    return top, validated_candidates, safety_flags, "", inst_type_map
 
 
 async def run_strategy_scan(strategy_id: str) -> None:
@@ -162,10 +165,12 @@ async def run_strategy_scan(strategy_id: str) -> None:
     with Session(engine) as session:
         strategy = session.get(Strategy, strategy_id)
         if not strategy or not strategy.enabled:
+            logger.info("Strategy %s: disabled or missing, skipping.", strategy_id)
             return
 
         user = session.get(User, strategy.user_id)
         if not user:
+            logger.info("Strategy %s: user %s not found, skipping.", strategy_id, strategy.user_id)
             return
 
         user_settings = session.exec(
@@ -174,20 +179,20 @@ async def run_strategy_scan(strategy_id: str) -> None:
 
         # Market hours check (skip for pro users if desired — keep for MVP)
         if not _is_market_hours():
-            logger.debug("Strategy %s: outside market hours, skipping.", strategy_id)
+            logger.info("Strategy %s: outside market hours, skipping.", strategy_id)
             return
 
         if user_settings and _in_quiet_hours(user_settings):
-            logger.debug("Strategy %s: user quiet hours, skipping.", strategy_id)
+            logger.info("Strategy %s: user quiet hours, skipping.", strategy_id)
             return
 
         if settings.is_private_test:
             allowed, reason = can_call_claude(user.id, session)
             if not allowed:
-                logger.debug("Strategy %s: %s", strategy_id, reason)
+                logger.info("Strategy %s: %s", strategy_id, reason)
                 return
         elif _quota_remaining(user, session) <= 0:
-            logger.debug("Strategy %s: daily quota exhausted.", strategy_id)
+            logger.info("Strategy %s: daily quota exhausted.", strategy_id)
             return
 
         # Fetch balance
@@ -201,6 +206,7 @@ async def run_strategy_scan(strategy_id: str) -> None:
         watchlist: list[str] = strategy.watchlist or []
 
         if not watchlist:
+            logger.info("Strategy %s: empty watchlist, skipping.", strategy_id)
             return
 
         # Formula scan
@@ -216,10 +222,11 @@ async def run_strategy_scan(strategy_id: str) -> None:
         non_duplicate: list[object] = []
         for c in candidates[:5]:
             if _recently_alerted(user.id, c.ticker, session):
+                logger.info("Strategy %s: %s skipped due to duplicate cooldown.", strategy_id, c.ticker)
                 continue
             non_duplicate.append(c)
 
-        top, validated_candidates, safety_flags, msg = await _pick_top_candidate(non_duplicate, mission=None)
+        top, validated_candidates, safety_flags, msg, inst_type_map = await _pick_top_candidate(non_duplicate, mission=None)
         if top is None:
             logger.info("Strategy %s: %s", strategy_id, msg)
             strategy.last_scanned_at = datetime.now(timezone.utc)
@@ -227,20 +234,39 @@ async def run_strategy_scan(strategy_id: str) -> None:
             session.commit()
             return
 
+        formula_score = int(round(top.score))
+        if formula_score < settings.SCHEDULED_MIN_FORMULA_SCORE_FOR_CLAUDE:
+            logger.info(
+                "SCHEDULED SCAN no-claude | strategy=%s | ticker=%s | formula_score=%d | reason=formula below %d",
+                strategy_id,
+                top.ticker,
+                formula_score,
+                settings.SCHEDULED_MIN_FORMULA_SCORE_FOR_CLAUDE,
+            )
+            strategy.last_scanned_at = datetime.now(timezone.utc)
+            session.add(strategy)
+            session.commit()
+            return
+
         # Claude analysis
         try:
+            claude_candidates = [top] + [
+                c for c in validated_candidates if c.ticker != top.ticker
+            ][: max(0, settings.CLAUDE_MAX_CANDIDATES - 1)]
             rec = await claude_service.analyse_candidates(
-                [top] + [c for c in validated_candidates if c.ticker != top.ticker][:2],
-                user_balance, max_trade_amount, mission=None
+                claude_candidates,
+                user_balance,
+                max_trade_amount,
+                mission=None,
+                instrument_types=inst_type_map,
             )
             record_claude_call(user.id, session)
         except ValueError as exc:
             logger.warning("Strategy %s: Claude validation failed: %s", strategy_id, exc)
             return
 
-        formula_score = int(round(top.score))
         claude_confidence = rec.claude_confidence
-        portfolio_fit_score = 50
+        portfolio_fit_score = 70 if inst_type_map.get(top.ticker.upper()) == "ETF" else 50
         action_strength = calculate_buy_action_strength(
             formula_score, claude_confidence, portfolio_fit_score
         )
@@ -272,8 +298,14 @@ async def run_strategy_scan(strategy_id: str) -> None:
         # Gate: only persist actionable alerts
         if not _is_actionable(action, trading212_review_enabled, executable):
             logger.info(
-                "SCHEDULED SCAN no-action | strategy=%s | ticker=%s | action=%s | reason=%s",
-                strategy_id, top.ticker, action, msg or "thresholds not met",
+                "SCHEDULED SCAN no-action | strategy=%s | ticker=%s | formula_score=%d | claude_conf=%d | action_strength=%d | action=%s | flags=%s",
+                strategy_id,
+                top.ticker,
+                formula_score,
+                claude_confidence,
+                action_strength,
+                action,
+                "; ".join(safety_flags) or "thresholds not met",
             )
             if not settings.is_private_test:
                 _increment_usage(user.id, session)

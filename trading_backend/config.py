@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     t212_secret: str | None = None
     t212_env: str = "demo"
     claude_model: str = "claude-3-5-sonnet-20241022"
+    claude_max_tokens: int = 550
+    claude_max_candidates: int = 3
+    enable_claude_prompt_cache: bool = True
     app_mode: str = "private_test"
     test_user_id: str = "chris"
     enable_public_auth: bool = False
@@ -29,6 +32,7 @@ class Settings(BaseSettings):
     quiet_hours_start: int = 22
     quiet_hours_end: int = 8
     min_push_action_strength: int = 75
+    scheduled_min_formula_score_for_claude: int = 70
     sell_target_pct: float = 8.0
     stop_loss_pct: float = 5.0
     stale_position_days: int = 14
@@ -52,6 +56,12 @@ class Settings(BaseSettings):
     def T212_ENV(self) -> str: return self.t212_env
     @property
     def CLAUDE_MODEL(self) -> str: return self.claude_model
+    @property
+    def CLAUDE_MAX_TOKENS(self) -> int: return self.claude_max_tokens
+    @property
+    def CLAUDE_MAX_CANDIDATES(self) -> int: return self.claude_max_candidates
+    @property
+    def ENABLE_CLAUDE_PROMPT_CACHE(self) -> bool: return self.enable_claude_prompt_cache
     @property
     def APP_MODE(self) -> str: return self.app_mode
     @property
@@ -90,6 +100,8 @@ class Settings(BaseSettings):
     def MAX_RISK_PCT(self) -> float: return self.max_risk_pct
     @property
     def MIN_PUSH_ACTION_STRENGTH(self) -> int: return self.min_push_action_strength
+    @property
+    def SCHEDULED_MIN_FORMULA_SCORE_FOR_CLAUDE(self) -> int: return self.scheduled_min_formula_score_for_claude
 
 
 settings = Settings()
