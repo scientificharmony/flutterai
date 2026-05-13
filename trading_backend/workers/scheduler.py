@@ -10,6 +10,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlmodel import Session, select
 
+from config import settings
 from database import engine
 from models.db_models import Strategy
 from workers.outcome_job import run_outcome_check

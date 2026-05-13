@@ -4211,3 +4211,66 @@ Going forward in this thread:
 - include commit id, purpose, files/areas touched, deployment notes, and test result
 - commit and push the notes update
 
+---
+
+## 2026-05-13 — Hotfix: Forex Entry Scheduler Startup
+
+### Issue
+
+After deploying forex entry setup alerts on Linode, backend startup failed:
+
+```text
+NameError: name 'settings' is not defined
+```
+
+Location:
+
+```text
+workers/scheduler.py
+```
+
+Cause:
+- `scheduler.py` now uses `settings.FOREX_ENTRY_SCAN_MINUTES`
+- `settings` had not been imported into that module
+
+### Fix
+
+Updated:
+
+```text
+trading_backend/workers/scheduler.py
+```
+
+Added:
+
+```python
+from config import settings
+```
+
+### Verification
+
+Focused backend tests passed:
+
+```text
+21 passed
+```
+
+### Deploy
+
+Pull latest and restart:
+
+```bash
+cd ~/flutterai/flutterai
+git pull --ff-only origin master
+cd trading_backend
+sudo systemctl restart flutterai-backend.service
+sleep 3
+sudo journalctl -u flutterai-backend.service -n 50 --no-pager
+```
+
+Expected healthy scheduler startup:
+
+```text
+forex_monitor=5m, forex_entry=15m
+```
+
