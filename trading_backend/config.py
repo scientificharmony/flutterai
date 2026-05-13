@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     sell_target_pct: float = 8.0
     stop_loss_pct: float = 5.0
     stale_position_days: int = 14
+    forex_provider: str = "mock"
+    forex_demo_balance: float = 5000.0
+    forex_risk_bps: int = 50
+    forex_min_signal_strength: int = 78
+    ig_api_key: str = ""
+    ig_username: str = ""
+    ig_password: str = ""
+    ig_account_type: str = "DEMO"
 
     @property
     def is_private_test(self) -> bool:
@@ -102,6 +110,22 @@ class Settings(BaseSettings):
     def MIN_PUSH_ACTION_STRENGTH(self) -> int: return self.min_push_action_strength
     @property
     def SCHEDULED_MIN_FORMULA_SCORE_FOR_CLAUDE(self) -> int: return self.scheduled_min_formula_score_for_claude
+    @property
+    def FOREX_PROVIDER(self) -> str: return self.forex_provider
+    @property
+    def FOREX_DEMO_BALANCE(self) -> float: return self.forex_demo_balance
+    @property
+    def FOREX_RISK_BPS(self) -> int: return self.forex_risk_bps
+    @property
+    def FOREX_MIN_SIGNAL_STRENGTH(self) -> int: return self.forex_min_signal_strength
+    @property
+    def IG_API_KEY(self) -> str: return self.ig_api_key
+    @property
+    def IG_USERNAME(self) -> str: return self.ig_username
+    @property
+    def IG_PASSWORD(self) -> str: return self.ig_password
+    @property
+    def IG_ACCOUNT_TYPE(self) -> str: return self.ig_account_type
 
 
 settings = Settings()

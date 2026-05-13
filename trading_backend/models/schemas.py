@@ -217,3 +217,38 @@ class PerformanceSummary(BaseModel):
     worst_performing_action_strength_band: Optional[str]
     today_usage: DailyUsageSummary
     recent_signals: list[SignalPerformanceResponse]
+
+
+# ── Forex Lab ────────────────────────────────────────────────────────────────
+
+class ForexSignalResponse(BaseModel):
+    pair: str
+    direction: Literal["LONG", "SHORT", "NO_TRADE"]
+    strength: int = Field(ge=0, le=100)
+    timeframe: str
+    entry: float
+    stop_loss: float
+    take_profit: float
+    risk_reward: float
+    risk_amount: float
+    position_units: int
+    rationale: str
+    invalidation: str
+    practice_only: bool = True
+
+
+class ForexSummaryResponse(BaseModel):
+    provider: str
+    connected: bool
+    account_type: str
+    demo_balance: float
+    risk_bps: int
+    risk_amount: float
+    min_signal_strength: int
+    pairs: list[str]
+    signals: list[ForexSignalResponse]
+
+
+class ForexScanRequest(BaseModel):
+    timeframe: str = "15m"
+    pairs: list[str] = Field(default_factory=list)

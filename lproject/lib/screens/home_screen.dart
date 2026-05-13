@@ -8,6 +8,7 @@ import '../models/alert_model.dart';
 import '../services/device_service.dart';
 import '../theme/app_theme.dart';
 import 'alert_detail_screen.dart';
+import 'forex_lab_screen.dart';
 import 'holdings_screen.dart';
 import 'mission_screen.dart';
 import 'pie_builder_screen.dart';
@@ -79,12 +80,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   AppBar _buildAppBar() {
     return AppBar(
+      titleSpacing: 12,
       title: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 8,
-            height: 8,
-            margin: const EdgeInsets.only(right: 10),
+            width: 6,
+            height: 6,
+            margin: const EdgeInsets.only(right: 7),
             decoration: BoxDecoration(
               color: AppColors.orange,
               shape: BoxShape.circle,
@@ -93,12 +96,13 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           Text('HEY JIMMY',
               style: GoogleFonts.orbitron(
-                  color: AppColors.orange, fontWeight: FontWeight.w700, fontSize: 15)),
+                  color: AppColors.orange, fontWeight: FontWeight.w700, fontSize: 13)),
         ],
       ),
       actions: [
         IconButton(
-          icon: const Icon(Icons.analytics_outlined, size: 20),
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.analytics_outlined, size: 19),
           tooltip: 'Dashboard',
           onPressed: () => Navigator.push(
             context,
@@ -106,7 +110,17 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         IconButton(
-          icon: const Icon(Icons.account_balance_wallet_outlined, size: 20),
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.currency_exchange, size: 19),
+          tooltip: 'Forex Lab',
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const ForexLabScreen()),
+          ),
+        ),
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.account_balance_wallet_outlined, size: 19),
           tooltip: 'My Holdings',
           onPressed: () => Navigator.push(
             context,
@@ -114,7 +128,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         IconButton(
-          icon: const Icon(Icons.pie_chart_outline, size: 20),
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.pie_chart_outline, size: 19),
           tooltip: 'Saved Pies',
           onPressed: () => Navigator.push(
             context,
@@ -122,10 +137,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         IconButton(
-          icon: const Icon(Icons.refresh, size: 20),
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.refresh, size: 19),
           onPressed: _loadAlerts,
         ),
-        const SizedBox(width: 4),
       ],
     );
   }
@@ -206,25 +221,36 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
     if (_alerts.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.radar,
-                  size: 64,
-                  color: AppColors.orange.withValues(alpha: 0.3)),
-              const SizedBox(height: 20),
-              Text('No signals yet.',
-                  style: GoogleFonts.orbitron(
-                      color: AppColors.textMuted, fontSize: 14)),
-              const SizedBox(height: 8),
-              Text('Tap Scan Market to run your first analysis.',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.dmSans(color: AppColors.textMuted, fontSize: 13)),
-            ],
-          ),
+      return RefreshIndicator(
+        color: AppColors.orange,
+        backgroundColor: AppColors.surface,
+        onRefresh: _loadAlerts,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 110),
+          children: [
+            _ForexLabEntry(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ForexLabScreen()),
+              ),
+            ),
+            const SizedBox(height: 48),
+            Column(
+              children: [
+                Icon(Icons.radar,
+                    size: 64,
+                    color: AppColors.orange.withValues(alpha: 0.3)),
+                const SizedBox(height: 20),
+                Text('No signals yet.',
+                    style: GoogleFonts.orbitron(
+                        color: AppColors.textMuted, fontSize: 14)),
+                const SizedBox(height: 8),
+                Text('Tap Scan Market to run your first analysis.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.dmSans(color: AppColors.textMuted, fontSize: 13)),
+              ],
+            ),
+          ],
         ),
       );
     }
@@ -234,11 +260,77 @@ class _HomeScreenState extends State<HomeScreen> {
       onRefresh: _loadAlerts,
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 100),
-        itemCount: _alerts.length,
+        itemCount: _alerts.length + 1,
         separatorBuilder: (_, __) => const SizedBox(height: 10),
-        itemBuilder: (_, i) => _AlertTile(
-          alert: _alerts[i],
-          onTap: () => _openAlert(_alerts[i]),
+        itemBuilder: (_, i) {
+          if (i == 0) {
+            return _ForexLabEntry(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ForexLabScreen()),
+              ),
+            );
+          }
+          final alert = _alerts[i - 1];
+          return _AlertTile(
+            alert: alert,
+            onTap: () => _openAlert(alert),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ForexLabEntry extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _ForexLabEntry({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.cyan.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: AppColors.cyan.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.currency_exchange, color: AppColors.cyan, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Forex Lab',
+                      style: GoogleFonts.orbitron(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13)),
+                  const SizedBox(height: 3),
+                  Text('Practice CFD signals and risk settings',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.dmSans(color: AppColors.textMuted, fontSize: 12)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.chevron_right, color: AppColors.textMuted, size: 20),
+          ],
         ),
       ),
     );
@@ -351,9 +443,9 @@ class _AlertTile extends StatelessWidget {
       return const Icon(Icons.timer_off_outlined, color: AppColors.inactive, size: 18);
     }
     if (alert.executable) {
-      return Icon(Icons.check_circle_outline, color: AppColors.green, size: 18);
+      return const Icon(Icons.check_circle_outline, color: AppColors.green, size: 18);
     }
-    return Icon(Icons.remove_circle_outline, color: AppColors.orange, size: 18);
+    return const Icon(Icons.remove_circle_outline, color: AppColors.orange, size: 18);
   }
 }
 
