@@ -4989,3 +4989,51 @@ Safety state:
 - There is still no silent auto-entry.
 - User must tap the confirmation button every time.
 
+## 2026-05-14 - Operational checkpoint after IG demo execution install
+
+Local app/device status:
+- Latest pushed code is `56c83cc feat: execute forex alerts in IG demo`.
+- Samsung device `RFCY11HPMGW` was visible to ADB.
+- Latest Firebase-enabled debug APK was installed successfully after the IG demo execution feature.
+- APK path:
+
+```text
+D:\DEV\Hey Jimmy\lproject\build\app\outputs\flutter-apk\app-debug.apk
+```
+
+Expected app behavior:
+- Forex setup push opens Forex Lab.
+- Forex Lab shows a confirmation popup for the pushed setup.
+- User taps `Proceed with demo trade`.
+- Backend places the trade on IG demo and creates/tracks the matching forex position.
+- Existing monitor continues to check open forex positions every 5 minutes and auto-close on `TAKE_PROFIT` or `CUT_LOSS` when IG deal details are present.
+
+Verification run locally:
+
+```bash
+python -m pytest trading_backend/tests/test_forex_lab.py trading_backend/tests/test_cfd_lab.py -q
+```
+
+Result:
+
+```text
+18 passed
+```
+
+Flutter analyzer:
+- Still reports the known pre-existing warnings in `alert_detail_screen.dart`, `pie_result_screen.dart`, and `fcm_service.dart`.
+- No new blocking compile errors from the forex execution flow.
+
+Linode checks to run when confirming production service state:
+
+```bash
+cd ~/flutterai/flutterai
+git log --oneline -3
+cd trading_backend
+curl -s http://localhost:8000/health
+curl -s http://localhost:8000/forex/summary
+curl -s http://localhost:8000/forex/positions
+curl -s http://localhost:8000/forex/entry-alerts
+sudo journalctl -u flutterai-backend.service -n 80 --no-pager | grep -i "forex position monitor\|forex entry scanner\|push sent\|auto-close\|error"
+```
+
