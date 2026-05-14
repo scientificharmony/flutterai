@@ -669,3 +669,41 @@ def test_execute_forex_entry_alert_places_ig_demo_trade(client, db_engine, monke
     assert body["direction"] == "SHORT"
     assert body["ig_linked"] is True
     assert placed == [("NZD/USD", "SHORT", 0.5, 1.05945, 1.04895)]
+
+
+def test_ig_snapshot_uses_short_cache(monkeypatch):
+    from services import forex_service
+
+    forex_service._snapshot_cache.clear()
+    forex_service._epic_cache.clear()
+    monkeypatch.setattr(forex_service, "_ig_base_url", lambda: "https://demo-api.ig.com/gateway/deal")
+    monkeypatch.setattr(forex_service, "_ig_headers", lambda version="1", session=None: {})
+
+    calls = []
+
+    class FakeResponse:
+        def __init__(self, data):
+            self._data = data
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._data
+
+    def fake_get(url, headers=None, params=None, timeout=None):
+        calls.append((url, params))
+        if url.endswith("/markets"):
+            return FakeResponse({"markets": [{"epic": "CS.D.EURUSD.CFD.IP", "instrumentName": "EUR/USD Mini"}]})
+        return FakeResponse({"snapshot": {"bid": 1.1, "offer": 1.2, "marketStatus": "TRADEABLE"}})
+
+    monkeypatch.setattr(forex_service.httpx, "get", fake_get)
+
+    session = forex_service.IgSession(cst="cst", security_token="token", account_id="acct", expires_at=999999)
+    first = forex_service._ig_snapshot("EUR/USD", session)
+    second = forex_service._ig_snapshot("EUR/USD", session)
+
+    assert first is not None
+    assert second is first
+    assert first.price == 1.15
+    assert len(calls) == 2

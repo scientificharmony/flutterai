@@ -5037,3 +5037,26 @@ curl -s http://localhost:8000/forex/entry-alerts
 sudo journalctl -u flutterai-backend.service -n 80 --no-pager | grep -i "forex position monitor\|forex entry scanner\|push sent\|auto-close\|error"
 ```
 
+## 2026-05-14 - IG forex price call throttling fix
+
+Issue seen on Linode:
+- Backend was healthy and `FOREX_PROVIDER=ig` was connected.
+- `/forex/summary` returned live IG prices.
+- `/forex/positions` then showed open positions as `WAIT` with `current_price:null`.
+- Journal showed IG returning `403 Forbidden` on repeated `/markets` calls for the same forex pairs.
+
+Cause:
+- The app/backend checks can call `/forex/summary`, `/forex/positions`, and the 5-minute monitor close together.
+- Each path was asking IG for the same market snapshots again.
+- That created unnecessary duplicate IG market calls and could hit IG demo API limits/refusals.
+
+Fix:
+- Added a short in-memory forex snapshot cache in `services/forex_service.py`.
+- Fresh IG snapshots are reused for 60 seconds.
+- This reduces repeated market calls when summary, positions, monitor, and entry scanner run close together.
+
+Expected impact:
+- `/forex/positions` should be more likely to show current price/P&L immediately after `/forex/summary`.
+- Forex monitor should make fewer duplicate IG market requests.
+- Auto-close still relies on recent prices only; stale long-lived prices are not used.
+

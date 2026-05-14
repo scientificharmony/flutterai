@@ -100,6 +100,8 @@ class IgPlacedPosition:
 
 _ig_session: IgSession | None = None
 _epic_cache: dict[str, str] = {}
+_snapshot_cache: dict[str, tuple[ForexMarketSnapshot, float]] = {}
+_SNAPSHOT_CACHE_SECONDS = 60.0
 
 
 def provider_connected() -> bool:
@@ -200,6 +202,10 @@ def _search_ig_epic(pair: str, session: IgSession) -> str | None:
 
 
 def _ig_snapshot(pair: str, session: IgSession) -> ForexMarketSnapshot | None:
+    cached = _snapshot_cache.get(pair)
+    if cached and cached[1] > monotonic():
+        return cached[0]
+
     epic = _search_ig_epic(pair, session)
     if not epic:
         return None
@@ -223,7 +229,7 @@ def _ig_snapshot(pair: str, session: IgSession) -> ForexMarketSnapshot | None:
         price = float(offer)
     if price is None:
         return None
-    return ForexMarketSnapshot(
+    market_snapshot = ForexMarketSnapshot(
         pair=pair,
         price=price,
         bid=float(bid) if bid is not None else None,
@@ -232,6 +238,8 @@ def _ig_snapshot(pair: str, session: IgSession) -> ForexMarketSnapshot | None:
         market_status=snapshot.get("marketStatus"),
         source="ig",
     )
+    _snapshot_cache[pair] = (market_snapshot, monotonic() + _SNAPSHOT_CACHE_SECONDS)
+    return market_snapshot
 
 
 def _position_direction_for_signal(direction: str) -> str:
