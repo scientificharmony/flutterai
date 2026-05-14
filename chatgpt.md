@@ -4877,3 +4877,50 @@ Rationale:
 - This gives a clean lab page for index/commodity/stock CFDs while keeping forex Level 2 logic isolated.
 - CFD Level 2 can be added later after validating signal quality and IG market matching.
 
+### Build and verification
+
+Backend tests run:
+
+```bash
+python -m pytest tests/test_cfd_lab.py tests/test_forex_lab.py -q
+```
+
+Result:
+
+```text
+16 passed
+```
+
+Flutter build run:
+
+```bash
+D:\DEV\flutter\bin\flutter.bat build apk --debug --dart-define=ENABLE_FIREBASE=true
+```
+
+Result:
+- Debug APK built successfully.
+- Installed to Samsung device `RFCY11HPMGW`.
+- Firebase flag was preserved in the build so push registration remains active.
+
+Commit pushed:
+
+```text
+c4a851e feat: add CFD lab practice mode
+```
+
+Linode deploy command:
+
+```bash
+cd ~/flutterai/flutterai
+git pull --ff-only origin master
+cd trading_backend
+sudo systemctl restart flutterai-backend.service
+sleep 3
+curl -s http://localhost:8000/cfd/summary
+```
+
+Expected:
+- `/cfd/summary` returns CFD practice signals.
+- The Android app shows a new CFD Lab shortcut and page.
+- CFD Lab is observation/manual-practice only until a later Level 2 implementation.
+
