@@ -3,9 +3,12 @@ from dataclasses import dataclass
 from time import monotonic
 
 import httpx
+import pandas as pd
 
 from config import settings
 from models.schemas import ForexSignalResponse, ForexSummaryResponse
+from services.indicators import compute_all
+from services.market_data import get_forex_ohlcv
 
 logger = logging.getLogger(__name__)
 
@@ -118,15 +121,116 @@ def _pip_size(pair: str) -> float:
     return 0.01 if pair.endswith("/JPY") else 0.0001
 
 
-def _mock_strength(pair: str, timeframe: str) -> int:
+def _fallback_strength(pair: str, timeframe: str) -> int:
+    """Deterministic fallback used only when OHLCV data is unavailable."""
     seed = sum(ord(ch) for ch in f"{pair}:{timeframe}")
     return 60 + (seed % 24)
 
 
-def _mock_direction(pair: str, strength: int) -> str:
+def _score_rsi(rsi_val: float, direction: str) -> float:
+    """Score RSI 0–30 based on how well it supports the direction."""
+    if direction == "LONG":
+        if 40 <= rsi_val <= 65:
+            return 30.0
+        if 30 <= rsi_val < 40:
+            return (rsi_val - 30) / 10 * 30
+        if 65 < rsi_val <= 70:
+            return (70 - rsi_val) / 5 * 30
+        return 0.0
+    else:  # SHORT
+        if 35 <= rsi_val <= 60:
+            return 30.0
+        if 60 < rsi_val <= 70:
+            return (70 - rsi_val) / 10 * 30
+        if 30 <= rsi_val < 35:
+            return (rsi_val - 30) / 5 * 30
+        return 0.0
+
+
+def _real_signal(pair: str) -> tuple[int, str]:
+    """
+    Calculate signal strength (0–100) and direction from real indicators.
+
+    Scoring breakdown:
+      Trend  — SMA20 vs SMA50 gap strength  40 pts
+      RSI    — RSI14 position for direction  30 pts
+      Price  — close vs SMA20               20 pts
+      ATR    — volatility within normal band 10 pts
+
+    Returns (strength, direction). Falls back to deterministic mock
+    if OHLCV data is unavailable or indicators cannot be computed.
+    """
+    data = get_forex_ohlcv(pair)
+    if data is None or len(data.df) < 50:
+        fb = _fallback_strength(pair, "1h")
+        return fb, ("NO_TRADE" if fb < settings.FOREX_MIN_SIGNAL_STRENGTH else "LONG")
+
+    df = compute_all(data.df)
+    last = df.iloc[-1]
+
+    sma20 = last.get("SMA20")
+    sma50 = last.get("SMA50")
+    rsi14 = last.get("RSI14")
+    atr14 = last.get("ATR14")
+    price = float(last["Close"])
+
+    if pd.isna(sma20) or pd.isna(sma50) or pd.isna(rsi14):
+        fb = _fallback_strength(pair, "1h")
+        return fb, ("NO_TRADE" if fb < settings.FOREX_MIN_SIGNAL_STRENGTH else "LONG")
+
+    gap_pct = abs(float(sma20) - float(sma50)) / float(sma50) * 100
+    if gap_pct < 0.03:
+        return 40, "NO_TRADE"
+
+    direction = "LONG" if float(sma20) > float(sma50) else "SHORT"
+
+    trend_score = min(40.0, gap_pct / 0.5 * 40)
+    rsi_score = _score_rsi(float(rsi14), direction)
+    price_score = 20.0 if (direction == "LONG" and price > float(sma20)) or (direction == "SHORT" and price < float(sma20)) else 0.0
+
+    atr_score = 0.0
+    if not pd.isna(atr14) and float(atr14) > 0:
+        atr_series = df["ATR14"].dropna()
+        if len(atr_series) >= 20:
+            avg_atr = float(atr_series.iloc[-20:].mean())
+            if avg_atr > 0:
+                ratio = float(atr14) / avg_atr
+                if 0.5 <= ratio <= 2.0:
+                    atr_score = 10.0
+                elif 0.3 <= ratio < 0.5 or 2.0 < ratio <= 3.0:
+                    atr_score = 5.0
+
+    strength = int(round(min(100.0, max(0.0, trend_score + rsi_score + price_score + atr_score))))
     if strength < settings.FOREX_MIN_SIGNAL_STRENGTH:
-        return "NO_TRADE"
-    return "LONG" if sum(ord(ch) for ch in pair) % 2 == 0 else "SHORT"
+        direction = "NO_TRADE"
+
+    return strength, direction
+
+
+def _atr_stops(df: pd.DataFrame, direction: str, price: float, pair: str) -> tuple[float, float]:
+    """
+    Calculate stop loss and take profit using ATR14 (1.5× stop, 3× TP = 2:1 RR).
+    Falls back to static pip offsets if ATR is unavailable.
+    """
+    pip = _pip_size(pair)
+    fallback_stop_pips = 25 if pair.endswith("/JPY") else 35
+
+    try:
+        atr14 = float(df["ATR14"].dropna().iloc[-1])
+    except Exception:
+        atr14 = 0.0
+
+    if atr14 > 0:
+        stop_dist = atr14 * 1.5
+        tp_dist = atr14 * 3.0
+    else:
+        stop_dist = fallback_stop_pips * pip
+        tp_dist = fallback_stop_pips * 2 * pip
+
+    if direction == "LONG":
+        return price - stop_dist, price + tp_dist
+    else:
+        return price + stop_dist, price - tp_dist
 
 
 def _ig_base_url() -> str:
@@ -444,21 +548,30 @@ def build_signal(snapshot: ForexMarketSnapshot, timeframe: str) -> ForexSignalRe
     pair = snapshot.pair
     price = snapshot.price
     pip = _pip_size(pair)
-    strength = _mock_strength(pair, timeframe)
-    direction = _mock_direction(pair, strength)
-    stop_pips = 25 if pair.endswith("/JPY") else 35
-    target_pips = stop_pips * 2
-    if direction == "SHORT":
-        stop_loss = price + (stop_pips * pip)
-        take_profit = price - (target_pips * pip)
+
+    strength, direction = _real_signal(pair)
+
+    data = get_forex_ohlcv(pair)
+    if data is not None and len(data.df) >= 50:
+        df_ind = compute_all(data.df)
+        stop_loss, take_profit = _atr_stops(df_ind, direction, price, pair)
     else:
-        stop_loss = price - (stop_pips * pip)
-        take_profit = price + (target_pips * pip)
+        fallback_stop_pips = 25 if pair.endswith("/JPY") else 35
+        if direction == "SHORT":
+            stop_loss = price + (fallback_stop_pips * pip)
+            take_profit = price - (fallback_stop_pips * 2 * pip)
+        else:
+            stop_loss = price - (fallback_stop_pips * pip)
+            take_profit = price + (fallback_stop_pips * 2 * pip)
+
     if direction == "NO_TRADE":
         stop_loss = price
         take_profit = price
 
+    stop_dist = abs(price - stop_loss)
     risk = risk_amount()
+    position_units = 0 if direction == "NO_TRADE" or stop_dist == 0 else int(max(1, risk / stop_dist))
+
     return ForexSignalResponse(
         pair=pair,
         direction=direction,
@@ -469,15 +582,17 @@ def build_signal(snapshot: ForexMarketSnapshot, timeframe: str) -> ForexSignalRe
         take_profit=round(take_profit, 5),
         risk_reward=2.0 if direction != "NO_TRADE" else 0.0,
         risk_amount=risk,
-        position_units=0 if direction == "NO_TRADE" else int(max(1, risk / (stop_pips * pip))),
+        position_units=position_units,
         rationale=(
             (
-                f"Practice-only IG demo snapshot. Market status: {snapshot.market_status or 'unknown'}."
+                f"Signal based on SMA20/SMA50 trend, RSI14, and ATR14. "
+                f"Strength {strength}/100. "
+                f"Market status: {snapshot.market_status or 'unknown'}."
                 if snapshot.source == "ig"
-                else "Practice-only mock setup until an IG demo connector is configured."
+                else f"Signal based on SMA20/SMA50 trend, RSI14, and ATR14. Strength {strength}/100."
             )
             if direction != "NO_TRADE"
-            else "No practice trade: signal strength is below the Forex Lab gate."
+            else "No trade: signal strength below threshold or trend is unclear."
         ),
         invalidation="Do not use live funds. Ignore if spread widens or price moves beyond stop.",
     )

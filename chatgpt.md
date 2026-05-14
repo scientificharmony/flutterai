@@ -2437,6 +2437,40 @@ ENABLE_PUSH_NOTIFICATIONS=true
 FIREBASE_SERVICE_ACCOUNT_PATH=/absolute/path/to/firebase-service-account.json
 ```
 
+## Status update - 2026-05-14
+
+### Verification completed
+
+- Confirmed commit `56c83cc` (execute forex alerts in IG demo) is fully implemented in local code and deployed to the Linode server.
+- All 11 aspects of the feature verified: DEMO guard, IG provider check, duplicate pair/direction rejection, slippage check, stop/limit from alert, default size 0.5, IG deal storage, push type=forex_entry_alert, Forex Lab popup, "Proceed with demo trade" button, notification tap routing.
+- Git repo is clean. Local code is up to date with origin/master.
+- Flutter app rebuilt and installed on Samsung device (SM S938B).
+
+### Live positions as of 17:11 UTC
+
+3 open demo positions, all in profit, all ig_linked=True:
+
+- USD/CHF LONG — pnl=+£16.36
+- EUR/USD SHORT — pnl=+£42.28
+- GBP/CHF SHORT — pnl=+£51.14
+
+IG account: Funds £10,000 | P&L £33.63 | Available £9,598.14
+
+GBP/CHF was ig_linked=False from 15:15 to 16:42 before linking resolved. Monitor running every 5 minutes as expected. HOLD_CAUTION push fired correctly for GBP/CHF at 15:20 when pnl briefly went negative.
+
+### Current behaviour
+
+- Positions are being left to run to TP (take profit).
+- IG will close automatically when price hits the limit level set from the alert.
+- Monitor will pick up the closure and update position status.
+- Push notifications will fire on HOLD_CAUTION so manual intervention is possible if needed.
+
+### Next steps
+
+- Monitor live positions to TP close.
+- Verify position status updates correctly in app after IG auto-close.
+- Investigate GBP/CHF ig_linked delay to confirm it is expected behaviour.
+
 6. The Flutter app must be built with Firebase enabled:
 
 ```bash

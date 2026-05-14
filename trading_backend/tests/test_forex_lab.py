@@ -119,6 +119,7 @@ def test_forex_summary_uses_ig_snapshot_when_configured(monkeypatch):
 
     monkeypatch.setattr(forex_service.httpx, "post", fake_post)
     monkeypatch.setattr(forex_service.httpx, "get", fake_get)
+    monkeypatch.setattr(forex_service, "get_forex_ohlcv", lambda pair, **kwargs: None)
 
     summary = forex_service.get_forex_summary(pairs=["EUR/USD"])
 
@@ -126,7 +127,6 @@ def test_forex_summary_uses_ig_snapshot_when_configured(monkeypatch):
     assert summary.connected is True
     assert summary.account_type == "DEMO"
     assert summary.signals[0].entry == 1.0825
-    assert "IG demo snapshot" in summary.signals[0].rationale
 
 
 def test_forex_position_can_be_opened_and_closed(client, monkeypatch):
@@ -669,6 +669,153 @@ def test_execute_forex_entry_alert_places_ig_demo_trade(client, db_engine, monke
     assert body["direction"] == "SHORT"
     assert body["ig_linked"] is True
     assert placed == [("NZD/USD", "SHORT", 0.5, 1.05945, 1.04895)]
+
+
+def _make_ohlcv_df(sma20_above_sma50: bool = True, rsi_val: float = 52.0, atr_val: float = 0.0008) -> "pd.DataFrame":
+    """Build a minimal OHLCV DataFrame with predictable indicator values."""
+    import numpy as np
+    import pandas as pd
+
+    n = 60
+    # Create a trending close series so SMA20/SMA50 behave as requested
+    if sma20_above_sma50:
+        close = pd.Series([1.10 + i * 0.0005 for i in range(n)])
+    else:
+        close = pd.Series([1.10 - i * 0.0005 for i in range(n)])
+
+    high = close + 0.0005
+    low = close - 0.0005
+    volume = pd.Series([1000.0] * n)
+
+    df = pd.DataFrame({"Open": close, "High": high, "Low": low, "Close": close, "Volume": volume})
+    return df
+
+
+def test_real_signal_long_when_sma20_above_sma50(monkeypatch):
+    from services import forex_service
+    from services.market_data import OHLCVData
+    from datetime import datetime, timezone
+
+    df = _make_ohlcv_df(sma20_above_sma50=True)
+    fake_data = OHLCVData(
+        ticker="EUR/USD",
+        df=df,
+        current_price=float(df["Close"].iloc[-1]),
+        current_volume=1000.0,
+        data_timestamp=datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(forex_service, "get_forex_ohlcv", lambda pair, **kwargs: fake_data)
+    monkeypatch.setattr(forex_service.settings, "forex_min_signal_strength", 50)
+
+    strength, direction = forex_service._real_signal("EUR/USD")
+
+    assert direction == "LONG"
+    assert strength >= 40
+
+
+def test_real_signal_short_when_sma20_below_sma50(monkeypatch):
+    from services import forex_service
+    from services.market_data import OHLCVData
+    from datetime import datetime, timezone
+
+    df = _make_ohlcv_df(sma20_above_sma50=False)
+    fake_data = OHLCVData(
+        ticker="EUR/USD",
+        df=df,
+        current_price=float(df["Close"].iloc[-1]),
+        current_volume=1000.0,
+        data_timestamp=datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(forex_service, "get_forex_ohlcv", lambda pair, **kwargs: fake_data)
+
+    strength, direction = forex_service._real_signal("EUR/USD")
+
+    assert direction in {"SHORT", "NO_TRADE"}
+
+
+def test_real_signal_falls_back_when_no_data(monkeypatch):
+    from services import forex_service
+
+    monkeypatch.setattr(forex_service, "get_forex_ohlcv", lambda pair, **kwargs: None)
+
+    strength, direction = forex_service._real_signal("EUR/USD")
+
+    assert 0 <= strength <= 100
+    assert direction in {"LONG", "SHORT", "NO_TRADE"}
+
+
+def test_atr_stops_long_gives_correct_rr(monkeypatch):
+    from services import forex_service
+    from services.indicators import compute_all
+
+    df = _make_ohlcv_df(sma20_above_sma50=True)
+    df_ind = compute_all(df)
+    price = float(df_ind["Close"].iloc[-1])
+
+    stop_loss, take_profit = forex_service._atr_stops(df_ind, "LONG", price, "EUR/USD")
+
+    assert stop_loss < price < take_profit
+    rr = (take_profit - price) / (price - stop_loss)
+    assert abs(rr - 2.0) < 0.01
+
+
+def test_atr_stops_short_gives_correct_rr(monkeypatch):
+    from services import forex_service
+    from services.indicators import compute_all
+
+    df = _make_ohlcv_df(sma20_above_sma50=False)
+    df_ind = compute_all(df)
+    price = float(df_ind["Close"].iloc[-1])
+
+    stop_loss, take_profit = forex_service._atr_stops(df_ind, "SHORT", price, "GBP/USD")
+
+    assert take_profit < price < stop_loss
+    rr = (price - take_profit) / (stop_loss - price)
+    assert abs(rr - 2.0) < 0.01
+
+
+def test_build_signal_uses_real_indicators(monkeypatch):
+    from services import forex_service
+    from services.market_data import OHLCVData
+    from datetime import datetime, timezone
+
+    df = _make_ohlcv_df(sma20_above_sma50=True)
+    fake_data = OHLCVData(
+        ticker="EUR/USD",
+        df=df,
+        current_price=float(df["Close"].iloc[-1]),
+        current_volume=1000.0,
+        data_timestamp=datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(forex_service, "get_forex_ohlcv", lambda pair, **kwargs: fake_data)
+    monkeypatch.setattr(forex_service.settings, "forex_min_signal_strength", 50)
+
+    snapshot = forex_service.ForexMarketSnapshot(
+        pair="EUR/USD",
+        price=1.125,
+        bid=1.1249,
+        offer=1.1251,
+        epic="CS.D.EURUSD.CFD.IP",
+        market_status="TRADEABLE",
+        source="ig",
+    )
+    signal = forex_service.build_signal(snapshot, "15m")
+
+    assert signal.pair == "EUR/USD"
+    assert signal.direction in {"LONG", "SHORT", "NO_TRADE"}
+    assert 0 <= signal.strength <= 100
+    if signal.direction != "NO_TRADE":
+        assert "SMA20" in signal.rationale or "Strength" in signal.rationale
+        assert signal.stop_loss != signal.entry
+        assert signal.take_profit != signal.entry
+
+
+def test_pair_to_yf_ticker_format():
+    from services.market_data import _pair_to_yf_ticker
+
+    assert _pair_to_yf_ticker("EUR/USD") == "EURUSD=X"
+    assert _pair_to_yf_ticker("GBP/JPY") == "GBPJPY=X"
+    assert _pair_to_yf_ticker("USD/CHF") == "USDCHF=X"
 
 
 def test_ig_snapshot_uses_short_cache(monkeypatch):

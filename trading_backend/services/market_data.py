@@ -110,3 +110,50 @@ def get_data_timestamp(ticker: str) -> Optional[datetime]:
 
 def invalidate(ticker: str) -> None:
     _cache.pop(ticker, None)
+
+
+# Separate cache for forex OHLCV (keyed by "PAIR:interval")
+_forex_cache: dict[str, tuple[float, pd.DataFrame]] = {}
+_FOREX_CACHE_TTL_SECONDS = 300  # 5 minutes
+
+
+def _pair_to_yf_ticker(pair: str) -> str:
+    """Convert EUR/USD → EURUSD=X for yfinance."""
+    return pair.replace("/", "") + "=X"
+
+
+def get_forex_ohlcv(pair: str, period: str = "30d", interval: str = "1h") -> Optional[OHLCVData]:
+    """Fetch OHLCV data for a forex pair using yfinance. Returns None if unavailable or insufficient data."""
+    cache_key = f"{pair}:{interval}"
+    now = time.time()
+
+    if cache_key in _forex_cache:
+        ts, df = _forex_cache[cache_key]
+        if now - ts < _FOREX_CACHE_TTL_SECONDS:
+            return OHLCVData(
+                ticker=pair,
+                df=df.copy(),
+                current_price=float(df["Close"].iloc[-1]),
+                current_volume=float(df["Volume"].iloc[-1]),
+                data_timestamp=_newest_row_timestamp(df),
+            )
+
+    yf_ticker = _pair_to_yf_ticker(pair)
+    try:
+        raw = yf.download(yf_ticker, period=period, interval=interval, progress=False, auto_adjust=True)
+        if raw.empty or len(raw) < 50:
+            return None
+        if isinstance(raw.columns, pd.MultiIndex):
+            raw.columns = raw.columns.get_level_values(0)
+        _forex_cache[cache_key] = (now, raw)
+    except Exception:
+        return None
+
+    _, df = _forex_cache[cache_key]
+    return OHLCVData(
+        ticker=pair,
+        df=df.copy(),
+        current_price=float(df["Close"].iloc[-1]),
+        current_volume=float(df["Volume"].iloc[-1]),
+        data_timestamp=_newest_row_timestamp(df),
+    )
