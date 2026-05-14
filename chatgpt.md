@@ -4366,3 +4366,43 @@ Result:
 
 Build produced Kotlin incremental-cache warnings from the Windows/Gradle environment, but the APK was produced and installed successfully.
 
+---
+
+## 2026-05-14 — Forex Entry Cooldown Fix
+
+### User issue
+
+User pasted scheduler logs showing:
+
+```text
+Forex entry scanner: top=EUR/USD SHORT strength=80 provider=ig
+Forex entry scanner: cooldown active
+```
+
+The app had a valid actionable forex setup, but no push was sent because the entry alert cooldown was active.
+
+### Root cause
+
+The forex entry scanner created a `forex_entry_alerts` row before confirming whether a push notification actually reached a registered device. If device tokens were missing or stale, the failed alert still counted for cooldown and suppressed later valid notifications.
+
+### Implementation
+
+Updated:
+
+```text
+trading_backend/workers/forex_entry_scanner_job.py
+trading_backend/tests/test_forex_lab.py
+```
+
+Cooldown now only applies to previous forex entry alerts where:
+
+```text
+push_sent = true
+```
+
+This means failed/no-device forex entry alerts no longer block the next real notification after push registration is fixed.
+
+### Verification
+
+Added a regression test proving a recent `push_sent=false` forex entry alert does not activate cooldown.
+

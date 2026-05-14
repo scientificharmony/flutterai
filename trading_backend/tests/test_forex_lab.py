@@ -322,7 +322,7 @@ def test_forex_entry_scanner_sends_setup_push(db_engine, monkeypatch):
     )
 
     with Session(db_engine) as session:
-        user = User(device_id="forex-entry-user", plan="pro")
+        user = User(device_id="forex-entry-failed-push-user", plan="pro")
         session.add(user)
         session.commit()
         session.refresh(user)
@@ -348,3 +348,43 @@ def test_forex_entry_scanner_sends_setup_push(db_engine, monkeypatch):
     sent.clear()
     asyncio.run(forex_entry_scanner_job.run_forex_entry_scanner())
     assert sent == []
+
+
+def test_forex_entry_failed_push_does_not_start_cooldown(monkeypatch, db_engine):
+    from datetime import datetime, timezone
+
+    from sqlmodel import Session
+    from models.db_models import ForexEntryAlert, User
+    from workers import forex_entry_scanner_job
+
+    monkeypatch.setattr(forex_entry_scanner_job.settings, "forex_entry_cooldown_hours", 2)
+    monkeypatch.setattr(forex_entry_scanner_job, "engine", db_engine)
+
+    with Session(db_engine) as session:
+        user = User(device_id="forex-entry-user", plan="pro")
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        session.add(
+            ForexEntryAlert(
+                user_id=user.id,
+                pair="EUR/USD",
+                direction="SHORT",
+                strength=80,
+                entry_price=1.171,
+                stop_loss=1.1745,
+                take_profit=1.164,
+                risk_amount=50,
+                position_units=14285,
+                push_sent=False,
+                created_at=datetime.now(timezone.utc),
+            )
+        )
+        session.commit()
+
+        assert forex_entry_scanner_job._recent_entry_alert(
+            user.id,
+            "EUR/USD",
+            "SHORT",
+            session,
+        ) is False
