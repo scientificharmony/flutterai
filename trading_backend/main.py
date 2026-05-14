@@ -5,7 +5,7 @@ from fastapi import FastAPI
 
 from config import settings
 from database import create_db_and_tables
-from routers import health, scan, alerts, notifications, pie, holdings, forex, forex_positions
+from routers import health, scan, alerts, notifications, pie, holdings, forex, forex_positions, cfd
 from workers.scheduler import start_scheduler, stop_scheduler
 
 logging.basicConfig(
@@ -32,6 +32,7 @@ app.include_router(pie.router)
 app.include_router(holdings.router)
 app.include_router(forex.router)
 app.include_router(forex_positions.router)
+app.include_router(cfd.router)
 
 if settings.enable_admin_routes:
     from routers import admin

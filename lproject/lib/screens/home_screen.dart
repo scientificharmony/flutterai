@@ -8,6 +8,7 @@ import '../models/alert_model.dart';
 import '../services/device_service.dart';
 import '../theme/app_theme.dart';
 import 'alert_detail_screen.dart';
+import 'cfd_lab_screen.dart';
 import 'forex_lab_screen.dart';
 import 'holdings_screen.dart';
 import 'mission_screen.dart';
@@ -116,6 +117,15 @@ class _HomeScreenState extends State<HomeScreen> {
           onPressed: () => Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const ForexLabScreen()),
+          ),
+        ),
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.show_chart, size: 19),
+          tooltip: 'CFD Lab',
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const CfdLabScreen()),
           ),
         ),
         IconButton(
@@ -234,6 +244,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 MaterialPageRoute(builder: (_) => const ForexLabScreen()),
               ),
             ),
+            const SizedBox(height: 10),
+            _CfdLabEntry(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CfdLabScreen()),
+              ),
+            ),
             const SizedBox(height: 48),
             Column(
               children: [
@@ -264,11 +281,22 @@ class _HomeScreenState extends State<HomeScreen> {
         separatorBuilder: (_, __) => const SizedBox(height: 10),
         itemBuilder: (_, i) {
           if (i == 0) {
-            return _ForexLabEntry(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ForexLabScreen()),
-              ),
+            return Column(
+              children: [
+                _ForexLabEntry(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ForexLabScreen()),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _CfdLabEntry(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const CfdLabScreen()),
+                  ),
+                ),
+              ],
             );
           }
           final alert = _alerts[i - 1];
@@ -322,6 +350,61 @@ class _ForexLabEntry extends StatelessWidget {
                           fontSize: 13)),
                   const SizedBox(height: 3),
                   Text('Practice CFD signals and risk settings',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.dmSans(color: AppColors.textMuted, fontSize: 12)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.chevron_right, color: AppColors.textMuted, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CfdLabEntry extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _CfdLabEntry({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.orange.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: AppColors.orange.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.show_chart, color: AppColors.orange, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('CFD Lab',
+                      style: GoogleFonts.orbitron(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13)),
+                  const SizedBox(height: 3),
+                  Text('Practice index, commodity, and stock CFD setups',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.dmSans(color: AppColors.textMuted, fontSize: 12)),

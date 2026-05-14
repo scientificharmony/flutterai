@@ -4809,3 +4809,71 @@ Changed IG mode behavior:
 
 This keeps the Forex Lab from showing fake actionable prices when the app is supposed to be connected to IG.
 
+---
+
+## 2026-05-14 — Add CFD Lab Practice Mode
+
+### User request
+
+User asked whether Hey Jimmy could handle IG markets beyond forex, including:
+- FTSE 100 Cash
+- Germany 40 Cash
+- Wall Street Cash
+- Oil - Brent Crude
+- large stock CFDs such as Apple, Amazon, Tesla
+
+Decision:
+- Do not mix these into Forex Lab.
+- Add a separate CFD Lab because point value, stop distance, market hours, and contract sizing differ from forex pips.
+
+### Implementation
+
+Backend:
+
+```text
+trading_backend/services/cfd_service.py
+trading_backend/routers/cfd.py
+trading_backend/models/schemas.py
+trading_backend/main.py
+trading_backend/tests/test_cfd_lab.py
+```
+
+Frontend:
+
+```text
+lproject/lib/screens/cfd_lab_screen.dart
+lproject/lib/screens/home_screen.dart
+lproject/lib/config/api_config.dart
+```
+
+Initial CFD universe:
+
+```text
+FTSE 100 Cash
+Germany 40 Cash
+Wall Street Cash
+US Tech 100 Cash
+Oil - Brent Crude
+Apple Inc
+Amazon.com Inc
+Tesla Motors Inc
+```
+
+Routes:
+
+```text
+GET  /cfd/summary
+POST /cfd/scan
+```
+
+Current scope:
+- Practice signals only.
+- IG demo snapshots when available.
+- Manual entry only.
+- No CFD position tracking yet.
+- No CFD auto-close yet.
+
+Rationale:
+- This gives a clean lab page for index/commodity/stock CFDs while keeping forex Level 2 logic isolated.
+- CFD Level 2 can be added later after validating signal quality and IG market matching.
+
