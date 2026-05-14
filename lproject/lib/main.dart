@@ -1,5 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
+import 'theme/app_theme.dart';
 import 'screens/alert_detail_screen.dart';
 import 'screens/home_screen.dart';
 import 'services/device_service.dart';
@@ -14,6 +16,7 @@ class AppStartupConfig {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await WakelockPlus.enable();
   await DeviceService.instance.init();
   if (AppStartupConfig.enableFirebase) {
     try {
@@ -58,11 +61,9 @@ class _AITradingAppState extends State<AITradingApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: _navigatorKey,
-      title: 'Flutter AI',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
+      title: 'Hey Jimmy',
+      debugShowCheckedModeBanner: false,
+      theme: buildAppTheme(),
       home: const HomeScreen(),
     );
   }

@@ -4305,3 +4305,64 @@ Current healthy state:
 - status-change push notifications enabled
 - demo-only auto-close available when `ENABLE_FOREX_AUTO_CLOSE=true`
 
+---
+
+## 2026-05-14 — Keep Phone Screen Awake While App Is Open
+
+### User request
+
+User asked:
+
+```text
+can we make it so that when the app is open, my device screen NEVER goes to sleep?
+```
+
+### Implementation
+
+Added Flutter wakelock support.
+
+Updated:
+
+```text
+lproject/pubspec.yaml
+lproject/pubspec.lock
+lproject/lib/main.dart
+```
+
+Added dependency:
+
+```yaml
+wakelock_plus: ^1.2.8
+```
+
+Enabled wakelock during startup:
+
+```dart
+await WakelockPlus.enable();
+```
+
+This keeps the device screen awake while Hey Jimmy is open.
+
+### Build/install
+
+Ran:
+
+```bash
+D:\DEV\flutter\bin\flutter.bat pub get
+D:\DEV\flutter\bin\flutter.bat build apk --debug --dart-define=ENABLE_FIREBASE=true
+adb -s RFCY11HPMGW install -r build\app\outputs\flutter-apk\app-debug.apk
+```
+
+Result:
+- Firebase-enabled debug APK built.
+- Installed successfully to Samsung `SM S938B`.
+
+### Notes
+
+`flutter analyze` still reports existing unrelated warnings in:
+- `alert_detail_screen.dart`
+- `pie_result_screen.dart`
+- `fcm_service.dart`
+
+Build produced Kotlin incremental-cache warnings from the Windows/Gradle environment, but the APK was produced and installed successfully.
+
