@@ -5176,7 +5176,7 @@ Backend `trading_backend/services/cfd_service.py`:
 ### Notification tuning (invest + scanners)
 Backend `trading_backend/config.py` defaults updated:
 - `min_push_action_strength`: `75 -> 70`
-- `max_alerts_per_day`: `5 -> 15`
+- `max_alerts_per_day`: `5 -> 100`
 
 ### What Are "WATCH pushes"?
 The scanner has an internal action `WATCH` for non-actionable results.

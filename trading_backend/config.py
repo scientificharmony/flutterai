@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     admin_api_token: str = ""
     daily_ai_budget_gbp: float = 2.0
     max_claude_calls_per_day: int = 20
-    max_alerts_per_day: int = 15
+    max_alerts_per_day: int = 100
     database_url: str = "sqlite:///./hey_jimmy.db"
     firebase_service_account_path: str = ""
     free_scans_per_day: int = 3
