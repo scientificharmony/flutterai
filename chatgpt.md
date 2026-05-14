@@ -4406,3 +4406,50 @@ This means failed/no-device forex entry alerts no longer block the next real not
 
 Added a regression test proving a recent `push_sent=false` forex entry alert does not activate cooldown.
 
+---
+
+## 2026-05-14 — Wire Forex Practice Trades To IG Mini Positions
+
+### User issue
+
+User manually opened IG demo forex deals and tapped `I took this practice trade`, but the database showed:
+
+```text
+EUR/USD|SHORT|open||||
+USD/CHF|LONG|open|||HOLD_CAUTION|HOLD_CAUTION
+```
+
+The empty `ig_deal_id` / `ig_size` fields meant Hey Jimmy could monitor and notify, but could not auto-close the IG demo position.
+
+### Root cause
+
+The matcher required an exact IG epic match. IG can open the `Mini` forex market, for example:
+
+```text
+CS.D.USDCHF.MINI.IP
+```
+
+while the market lookup may return the standard CFD epic. Exact epic matching was too strict.
+
+### Implementation
+
+Updated:
+
+```text
+trading_backend/services/forex_service.py
+trading_backend/routers/forex_positions.py
+trading_backend/tests/test_forex_lab.py
+```
+
+Changes:
+- IG open positions now keep the market/instrument name.
+- Matching accepts exact epic OR normalized pair match in the IG epic/instrument name.
+- The router avoids reusing an IG deal ID already linked to another Hey Jimmy position.
+- Listing `/forex/positions` now attempts to backfill unlinked open practice trades from currently open IG demo positions.
+- Added coverage for linking a `USD/CHF Mini` IG position.
+
+Expected result after deploy:
+- Open Forex Lab or call `/forex/positions`.
+- Existing unlinked open practice trades should link if the matching IG demo position is still open.
+- New `I took this practice trade` actions should capture `ig_deal_id` and `ig_size`.
+

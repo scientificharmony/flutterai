@@ -60,6 +60,7 @@ class IgOpenPosition:
     direction: str
     size: float
     created_date: str | None = None
+    instrument_name: str | None = None
 
 
 _ig_session: IgSession | None = None
@@ -206,6 +207,17 @@ def _close_direction_for_position(direction: str) -> str:
     return "SELL" if direction.upper() == "BUY" else "BUY"
 
 
+def _normalise_market_text(value: str | None) -> str:
+    return "".join(ch for ch in (value or "").upper() if ch.isalnum())
+
+
+def _position_matches_pair(pos: IgOpenPosition, pair: str, searched_epic: str | None) -> bool:
+    if searched_epic and pos.epic == searched_epic:
+        return True
+    pair_key = _normalise_market_text(pair)
+    return pair_key in _normalise_market_text(pos.epic) or pair_key in _normalise_market_text(pos.instrument_name)
+
+
 def get_ig_open_positions() -> list[IgOpenPosition]:
     if not provider_connected():
         return []
@@ -224,6 +236,7 @@ def get_ig_open_positions() -> list[IgOpenPosition]:
         epic = market.get("epic") or position.get("epic")
         direction = position.get("direction")
         size = position.get("size")
+        instrument_name = market.get("instrumentName") or market.get("marketName") or market.get("name")
         if deal_id and epic and direction and size is not None:
             positions.append(
                 IgOpenPosition(
@@ -232,22 +245,28 @@ def get_ig_open_positions() -> list[IgOpenPosition]:
                     direction=str(direction).upper(),
                     size=float(size),
                     created_date=position.get("createdDate") or position.get("createdDateUTC"),
+                    instrument_name=instrument_name,
                 )
             )
     return positions
 
 
-def find_matching_ig_position(pair: str, direction: str) -> IgOpenPosition | None:
+def find_matching_ig_position(
+    pair: str,
+    direction: str,
+    exclude_deal_ids: set[str] | None = None,
+) -> IgOpenPosition | None:
     if not provider_connected():
         return None
     session = _get_ig_session()
     epic = _search_ig_epic(pair, session)
-    if not epic:
-        return None
     expected_direction = _position_direction_for_signal(direction)
+    exclude_deal_ids = exclude_deal_ids or set()
     matches = [
         pos for pos in get_ig_open_positions()
-        if pos.epic == epic and pos.direction == expected_direction
+        if pos.deal_id not in exclude_deal_ids
+        and pos.direction == expected_direction
+        and _position_matches_pair(pos, pair, epic)
     ]
     if not matches:
         return None

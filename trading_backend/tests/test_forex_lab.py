@@ -94,7 +94,7 @@ def test_forex_position_can_be_opened_and_closed(client, monkeypatch):
     from routers import forex_positions
 
     monkeypatch.setattr(forex_positions, "get_forex_mid_price", lambda pair: 1.085)
-    monkeypatch.setattr(forex_positions, "find_matching_ig_position", lambda pair, direction: None)
+    monkeypatch.setattr(forex_positions, "find_matching_ig_position", lambda pair, direction, exclude_deal_ids=None: None)
 
     opened = client.post(
         "/forex/positions",
@@ -141,7 +141,7 @@ def test_forex_position_links_matching_ig_deal(client, monkeypatch):
     monkeypatch.setattr(
         forex_positions,
         "find_matching_ig_position",
-        lambda pair, direction: IgOpenPosition(
+        lambda pair, direction, exclude_deal_ids=None: IgOpenPosition(
             deal_id="DIAAAABBB",
             epic="CS.D.EURUSD.CFD.IP",
             direction="SELL",
@@ -160,6 +160,42 @@ def test_forex_position_links_matching_ig_deal(client, monkeypatch):
             "take_profit": 1.074,
             "risk_amount": 50,
             "position_units": 10000,
+            "timeframe": "15m",
+        },
+    )
+
+    assert opened.status_code == 200
+    assert opened.json()["ig_linked"] is True
+
+
+def test_forex_position_links_matching_ig_mini_market(client, monkeypatch):
+    from services.forex_service import IgOpenPosition
+    from routers import forex_positions
+
+    monkeypatch.setattr(forex_positions, "get_forex_mid_price", lambda pair: 0.782)
+    monkeypatch.setattr(
+        forex_positions,
+        "find_matching_ig_position",
+        lambda pair, direction, exclude_deal_ids=None: IgOpenPosition(
+            deal_id="DIMINIUSDCHF",
+            epic="CS.D.USDCHF.MINI.IP",
+            direction="BUY",
+            size=0.5,
+            instrument_name="USD/CHF Mini",
+        ),
+    )
+
+    opened = client.post(
+        "/forex/positions",
+        headers={"device-id": "forex-mini-linked-device"},
+        json={
+            "pair": "USD/CHF",
+            "direction": "LONG",
+            "entry_price": 0.782,
+            "stop_loss": 0.7785,
+            "take_profit": 0.789,
+            "risk_amount": 50,
+            "position_units": 14285,
             "timeframe": "15m",
         },
     )

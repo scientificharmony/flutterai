@@ -114,6 +114,28 @@ def _to_response(pos: ForexPosition, current_price: Optional[float] = None) -> F
     )
 
 
+def _link_unlinked_ig_positions(positions: list[ForexPosition], session: Session) -> None:
+    linked_deal_ids = {pos.ig_deal_id for pos in positions if pos.ig_deal_id}
+    changed = False
+    for pos in positions:
+        if pos.status != "open" or pos.ig_deal_id:
+            continue
+        try:
+            ig_position = find_matching_ig_position(pos.pair, pos.direction, linked_deal_ids)
+        except Exception:
+            ig_position = None
+        if not ig_position:
+            continue
+        pos.ig_deal_id = ig_position.deal_id
+        pos.ig_epic = ig_position.epic
+        pos.ig_size = ig_position.size
+        linked_deal_ids.add(ig_position.deal_id)
+        session.add(pos)
+        changed = True
+    if changed:
+        session.commit()
+
+
 @router.get("", response_model=list[ForexPositionResponse])
 def list_forex_positions(
     user: User = Depends(get_current_user),
@@ -124,6 +146,7 @@ def list_forex_positions(
         .where(ForexPosition.user_id == user.id)
         .order_by(ForexPosition.opened_at.desc())
     ).all()
+    _link_unlinked_ig_positions(positions, session)
     current_prices = {pos.pair: get_forex_mid_price(pos.pair) for pos in positions if pos.status == "open"}
     return [_to_response(pos, current_prices.get(pos.pair)) for pos in positions]
 
@@ -140,7 +163,12 @@ def open_forex_position(
 
     ig_position = None
     try:
-        ig_position = find_matching_ig_position(body.pair, direction)
+        used_deal_ids = set(
+            session.exec(
+                select(ForexPosition.ig_deal_id).where(ForexPosition.ig_deal_id != None)
+            ).all()
+        )
+        ig_position = find_matching_ig_position(body.pair, direction, used_deal_ids)
     except Exception:
         ig_position = None
 
