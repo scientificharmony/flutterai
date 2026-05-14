@@ -5184,6 +5184,9 @@ The scanner has an internal action `WATCH` for non-actionable results.
 - `WATCH` outcomes are intentionally not persisted and do not trigger push notifications.
 - Only actionable outcomes (for example `BUY_REVIEW`) can become an alert/push, and they are still gated by `min_push_action_strength` and the daily alert limit.
 
+### Scheduler note
+The scheduled market scanner (`market_scan`) is configured on a 15 minute interval. It is now set to run once shortly after backend startup so frequent service restarts during setup don't prevent it from ever running.
+
 ### Trading212 ticker validation note
 Some clean tickers in the default watchlists (e.g. certain ETFs) may not appear as unique symbols in Trading212's instrument metadata feed. For scan/push purposes we allow a small fallback mapping so these are not dropped as `UNKNOWN` validation failures. This does not enable any order execution.
 
