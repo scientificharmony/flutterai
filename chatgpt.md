@@ -4680,3 +4680,47 @@ print("ENABLE_FOREX_AUTO_CLOSE:", settings.ENABLE_FOREX_AUTO_CLOSE)
 PY
 ```
 
+---
+
+## 2026-05-14 — Suppress Duplicate Forex Entry Alerts For Open Positions
+
+### User issue
+
+User accidentally cleared a notification. Backend inspection showed it was a new entry alert:
+
+```text
+Forex entry scanner: push sent | user=... | pair=EUR/USD | direction=SHORT
+```
+
+But the user already had an open linked `EUR/USD SHORT` practice trade:
+
+```text
+EUR/USD|SHORT|open|DIAAAAXG3A88MAS|0.5|HOLD|
+```
+
+### Implementation
+
+Updated:
+
+```text
+trading_backend/workers/forex_entry_scanner_job.py
+trading_backend/workers/forex_position_monitor_job.py
+trading_backend/tests/test_forex_lab.py
+```
+
+Changes:
+- Forex entry scanner now skips a signal if the user already has an open Hey Jimmy forex position for the same pair and direction.
+- This prevents repeated `EUR/USD SHORT` entry alerts while already in `EUR/USD SHORT`.
+- Added a regression test to confirm no entry alert/push is created when an existing open position matches the signal.
+- Forex position monitor now logs each open trade's status, current price, P/L, and IG-link state on every monitor pass.
+
+New monitor detail log format:
+
+```text
+Forex position monitor: EUR/USD SHORT status=HOLD price=1.17061 pnl=1.71 ig_linked=True
+```
+
+Expected result:
+- Entry pushes should be for new opportunities, not duplicates of open positions.
+- Live logs should show whether open positions remain `HOLD`, `HOLD_CAUTION`, `PROTECT_PROFIT`, `TAKE_PROFIT`, or `CUT_LOSS`.
+

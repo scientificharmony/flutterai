@@ -5,7 +5,7 @@ from sqlmodel import Session, select
 
 from config import settings
 from database import engine
-from models.db_models import DeviceToken, ForexEntryAlert, User
+from models.db_models import DeviceToken, ForexEntryAlert, ForexPosition, User
 from services.forex_service import DEFAULT_FOREX_PAIRS, get_forex_summary
 from services.notification_service import send_to_user_devices
 
@@ -60,6 +60,15 @@ def _recent_entry_alert(user_id: str, pair: str, direction: str, session: Sessio
 
 
 def _maybe_alert_user(user: User, signal, session: Session) -> None:
+    if _user_has_open_position(user.id, signal.pair, signal.direction, session):
+        logger.info(
+            "Forex entry scanner: open position already exists | user=%s | pair=%s | direction=%s",
+            user.id,
+            signal.pair,
+            signal.direction,
+        )
+        return
+
     if _recent_entry_alert(user.id, signal.pair, signal.direction, session):
         logger.info("Forex entry scanner: cooldown active | user=%s | pair=%s", user.id, signal.pair)
         return
@@ -109,3 +118,15 @@ def _maybe_alert_user(user: User, signal, session: Session) -> None:
         session.add(alert)
         session.commit()
         logger.info("Forex entry scanner: push sent | user=%s | pair=%s | direction=%s", user.id, signal.pair, signal.direction)
+
+
+def _user_has_open_position(user_id: str, pair: str, direction: str, session: Session) -> bool:
+    existing = session.exec(
+        select(ForexPosition).where(
+            ForexPosition.user_id == user_id,
+            ForexPosition.pair == pair,
+            ForexPosition.direction == direction,
+            ForexPosition.status == "open",
+        )
+    ).first()
+    return existing is not None

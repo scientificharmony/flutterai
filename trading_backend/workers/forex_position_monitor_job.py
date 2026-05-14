@@ -37,6 +37,15 @@ def _check_position(pos: ForexPosition, session: Session) -> None:
     current_price = get_forex_mid_price(pos.pair)
     pnl, _ = _calculate_pnl(pos, current_price)
     status, message = assistant_guidance(pos, current_price, pnl)
+    logger.info(
+        "Forex position monitor: %s %s status=%s price=%s pnl=%s ig_linked=%s",
+        pos.pair,
+        pos.direction,
+        status,
+        f"{current_price:.5f}" if current_price is not None else "unavailable",
+        f"{pnl:.2f}" if pnl is not None else "unavailable",
+        bool(pos.ig_deal_id and pos.ig_size),
+    )
 
     previous_status = pos.last_assistant_status
     pos.last_assistant_status = status
