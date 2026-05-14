@@ -5094,3 +5094,64 @@ Expected impact:
 - Forex monitor should make fewer duplicate IG market requests.
 - Auto-close still relies on recent prices only; stale long-lived prices are not used.
 
+## 2026-05-14 - IG demo execution deal-id fallback
+
+Issue:
+- IG `POST /positions/otc` returns a `dealReference`, and the subsequent confirm call may not immediately return a `dealId`.
+- If Hey Jimmy stores only the reference in `forex_positions.ig_deal_id`, IG auto-close can fail later because close expects a real `dealId`.
+
+Fix:
+- `POST /forex/entry-alerts/{alert_id}/execute-demo` now falls back to the most recent matching open IG position when confirm does not provide a `dealId`.
+- This improves reliability of the “tap push → proceed → backend manages trade” flow.
+
+## 2026-05-14 - Codebase Sanity Check (Desktop Workspace)
+
+What I verified:
+- `python -m pytest -q trading_backend/tests/test_forex_lab.py` passes in this desktop workspace (24 passed).
+- Push handling in Flutter is wired for forex entry alerts:
+  - `FcmService` registers device token with backend and routes notification taps via `onNotificationTap`.
+  - `main.dart` routes `type=forex_entry_alert` to `ForexLabScreen(initialEntryAlertId: alert_id)`.
+  - `ForexLabScreen` can execute an entry alert by calling `POST /forex/entry-alerts/{alert_id}/execute-demo`.
+- Wakelock is enabled on app start (`WakelockPlus.enable()`), so the screen should not sleep while the app is open.
+
+Current end-to-end forex flow (Level 2):
+1. Backend sends push: forex entry alert (pair, direction, entry/stop/target).
+2. User taps push: app opens Forex Lab and focuses the matching alert.
+3. User confirms: taps the entry alert button to execute.
+4. Backend places the IG demo trade and stores the IG identifiers in `forex_positions` (`ig_deal_id`, `ig_epic`, `ig_size`).
+5. Backend monitor runs every 5 minutes, updates status (HOLD, HOLD_CAUTION, PROTECT_PROFIT, TAKE_PROFIT, CUT_LOSS) and auto-closes on TAKE_PROFIT/CUT_LOSS when enabled.
+6. App receives pushes on status changes (so you can react and also see what the backend is doing).
+
+## 2026-05-14 - Forex entry alert: custom order popup + execute
+
+Goal:
+- When you tap a forex entry alert in the app, you should be able to manually edit the IG order fields (size/stop/target) and then have Hey Jimmy submit that exact order to IG demo, track the resulting position, and let the backend manage it.
+
+What changed:
+- Backend:
+  - Added `POST /forex/entry-alerts/{alert_id}/execute-demo-custom` which accepts `{ size, stop_loss, take_profit }` and places the IG demo trade using those exact values.
+- App:
+  - Forex Lab now shows an “Edit order (sent to IG demo)” popup when executing an entry alert.
+  - Popup is pre-filled from the alert and lets you edit:
+    - `Size (contracts)`
+    - `Stop loss (price)`
+    - `Take profit (price)`
+  - On confirm, the app calls the new custom execution endpoint and then refreshes positions.
+
+Tests:
+- `python -m pytest -q trading_backend/tests/test_forex_lab.py` (25 passed)
+
+Follow-up UX tweak:
+- If a pushed entry alert is already tracked (button disabled), tapping it now opens a small details popup showing the alert levels and (when available) the linked open position details (IG deal id, size, current price, P/L).
+- Open positions in Forex Lab are also tappable now to show a details popup + close action (avoids accidental closes).
+
+## 2026-05-14 - Sync IG open positions back into Hey Jimmy tracking
+
+Problem:
+- If you place a trade manually on IG (or accidentally close a trade inside Hey Jimmy), the database can end up missing an IG-open position, so Forex Lab shows fewer open trades than IG.
+
+Fix:
+- `GET /forex/positions` now imports any missing IG-open positions into `forex_positions` by `dealId`.
+- It infers the pair from the IG epic/instrument name and stores stop/limit/level from IG when available.
+- Response now includes `ig_deal_id` and `ig_size` so the app can show linked details.
+

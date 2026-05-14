@@ -119,10 +119,58 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
   }
 
   Future<void> _takeEntryAlert(ForexEntryAlert alert) async {
-    if (_savingTrade || alert.tracked) return;
-    final confirmed = await _confirmEntryAlert(alert);
-    if (confirmed != true) return;
+    if (_savingTrade) return;
+    if (alert.tracked) {
+      _showTrackedAlertDetails(alert);
+      return;
+    }
     await _executeEntryAlert(alert);
+  }
+
+  void _showTrackedAlertDetails(ForexEntryAlert alert) {
+    final matches = _positions.where(
+      (p) => p.status == 'open' && p.pair == alert.pair && p.direction == alert.direction,
+    );
+    final ForexPosition? pos = matches.isEmpty ? null : matches.first;
+
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${alert.pair} ${alert.direction}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _DialogLine(label: 'Status', value: 'Tracked'),
+            _DialogLine(label: 'Entry alert', value: alert.entryPrice.toStringAsFixed(5)),
+            _DialogLine(label: 'Stop', value: alert.stopLoss.toStringAsFixed(5)),
+            _DialogLine(label: 'Target', value: alert.takeProfit.toStringAsFixed(5)),
+            const SizedBox(height: 10),
+            if (pos == null) ...[
+              Text(
+                'This alert is tracked, but no matching open position was found in the app cache. Pull to refresh.',
+                style: GoogleFonts.dmSans(color: AppColors.textMuted, fontSize: 12),
+              ),
+            ] else ...[
+              _DialogLine(label: 'IG linked', value: pos.igLinked ? 'Yes' : 'No'),
+              if (pos.igDealId != null && pos.igDealId!.isNotEmpty)
+                _DialogLine(label: 'IG deal id', value: pos.igDealId!),
+              if (pos.igSize != null) _DialogLine(label: 'IG size', value: '${pos.igSize}'),
+              if (pos.currentPrice != null)
+                _DialogLine(label: 'Current', value: pos.currentPrice!.toStringAsFixed(5)),
+              if (pos.currentPnl != null)
+                _DialogLine(label: 'P/L', value: pos.currentPnl!.toStringAsFixed(2)),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _savePracticeTrade({
@@ -186,9 +234,15 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
     });
   }
 
-  Future<bool?> _confirmEntryAlert(ForexEntryAlert alert) {
+  Future<Map<String, dynamic>?> _showEntryAlertDialog(ForexEntryAlert alert) {
     final color = alert.direction == 'LONG' ? AppColors.green : AppColors.pink;
-    return showDialog<bool>(
+    final sizeController = TextEditingController(text: '0.5');
+    final stopController =
+        TextEditingController(text: alert.stopLoss.toStringAsFixed(5));
+    final targetController =
+        TextEditingController(text: alert.takeProfit.toStringAsFixed(5));
+
+    return showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('${alert.direction == 'LONG' ? 'BUY' : 'SELL'} ${alert.pair}'),
@@ -198,9 +252,35 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
           children: [
             _DialogLine(label: 'Strength', value: '${alert.strength}/100'),
             _DialogLine(label: 'Entry', value: alert.entryPrice.toStringAsFixed(5)),
-            _DialogLine(label: 'Stop', value: alert.stopLoss.toStringAsFixed(5)),
-            _DialogLine(label: 'Target', value: alert.takeProfit.toStringAsFixed(5)),
-            const _DialogLine(label: 'IG size', value: '0.5 contracts'),
+            const SizedBox(height: 12),
+            Text('Edit order (sent to IG demo)',
+                style: GoogleFonts.dmSans(
+                    color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 10),
+            TextField(
+              controller: sizeController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Size (contracts)',
+                hintText: '0.5',
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: stopController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Stop loss (price)',
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: targetController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Take profit (price)',
+              ),
+            ),
             _DialogLine(label: 'Planned risk', value: '£${alert.riskAmount.toStringAsFixed(0)}'),
             const SizedBox(height: 10),
             Text(
@@ -211,11 +291,26 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () {
+              final size = double.tryParse(sizeController.text.trim());
+              final stop = double.tryParse(stopController.text.trim());
+              final tp = double.tryParse(targetController.text.trim());
+              if (size == null || stop == null || tp == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Enter valid numbers for size/stop/target.')),
+                );
+                return;
+              }
+              Navigator.of(context).pop({
+                'size': size,
+                'stop_loss': stop,
+                'take_profit': tp,
+              });
+            },
             style: FilledButton.styleFrom(backgroundColor: color),
             child: const Text('Proceed with demo trade'),
           ),
@@ -225,12 +320,18 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
   }
 
   Future<void> _executeEntryAlert(ForexEntryAlert alert) async {
+    final custom = await _showEntryAlertDialog(alert);
+    if (custom == null || !mounted) return;
+
     setState(() => _savingTrade = true);
     try {
-      final res = await http.post(
-        Uri.parse(ApiConfig.forexExecuteEntryAlert(alert.id)),
-        headers: {'device-id': DeviceService.instance.deviceId},
-      );
+      final uri = Uri.parse(ApiConfig.forexExecuteEntryAlertCustom(alert.id));
+      final res = await http.post(uri,
+          headers: {
+            'device-id': DeviceService.instance.deviceId,
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode(custom));
       if (!mounted) return;
       if (res.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -662,16 +763,21 @@ class _EntryAlertTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = alert.direction == 'LONG' ? AppColors.green : AppColors.pink;
-    return Container(
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+        onTap: saving ? null : onTakeTrade,
+        child: Container(
+          padding: const EdgeInsets.all(13),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
           Row(
             children: [
               Text(alert.pair,
@@ -723,7 +829,9 @@ class _EntryAlertTile extends StatelessWidget {
               ),
             ),
           ),
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -815,18 +923,64 @@ class _ForexPositionTile extends StatelessWidget {
     required this.onClose,
   });
 
+  void _showDetails(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${position.pair} ${position.direction}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _DialogLine(label: 'Status', value: position.assistantStatus),
+            _DialogLine(label: 'Entry', value: position.entryPrice.toStringAsFixed(5)),
+            _DialogLine(label: 'Stop', value: position.stopLoss.toStringAsFixed(5)),
+            _DialogLine(label: 'Target', value: position.takeProfit.toStringAsFixed(5)),
+            if (position.currentPrice != null)
+              _DialogLine(label: 'Current', value: position.currentPrice!.toStringAsFixed(5)),
+            if (position.currentPnl != null)
+              _DialogLine(label: 'P/L', value: position.currentPnl!.toStringAsFixed(2)),
+            const SizedBox(height: 8),
+            _DialogLine(label: 'IG linked', value: position.igLinked ? 'Yes' : 'No'),
+            if (position.igDealId != null && position.igDealId!.isNotEmpty)
+              _DialogLine(label: 'IG deal id', value: position.igDealId!),
+            if (position.igSize != null) _DialogLine(label: 'IG size', value: '${position.igSize}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              onClose();
+            },
+            child: const Text('Close trade'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final positive = (position.currentPnl ?? 0) >= 0;
     final statusColor = _statusColor(position.assistantStatus, positive);
-    return Container(
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: statusColor.withValues(alpha: 0.3)),
-      ),
-      child: Column(
+        onTap: () => _showDetails(context),
+        child: Container(
+          padding: const EdgeInsets.all(13),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+          ),
+          child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -897,6 +1051,8 @@ class _ForexPositionTile extends StatelessWidget {
             ),
           ),
         ],
+      ),
+        ),
       ),
     );
   }
@@ -1276,6 +1432,9 @@ class ForexPosition {
   final double? currentPnlPct;
   final String assistantStatus;
   final String assistantMessage;
+  final bool igLinked;
+  final String? igDealId;
+  final double? igSize;
 
   const ForexPosition({
     required this.id,
@@ -1293,6 +1452,9 @@ class ForexPosition {
     required this.currentPnlPct,
     required this.assistantStatus,
     required this.assistantMessage,
+    required this.igLinked,
+    required this.igDealId,
+    required this.igSize,
   });
 
   factory ForexPosition.fromJson(Map<String, dynamic> json) => ForexPosition(
@@ -1311,5 +1473,8 @@ class ForexPosition {
         currentPnlPct: (json['current_pnl_pct'] as num?)?.toDouble(),
         assistantStatus: json['assistant_status'] as String? ?? 'HOLD',
         assistantMessage: json['assistant_message'] as String? ?? 'Trade is active.',
+        igLinked: json['ig_linked'] as bool? ?? false,
+        igDealId: json['ig_deal_id'] as String?,
+        igSize: (json['ig_size'] as num?)?.toDouble(),
       );
 }

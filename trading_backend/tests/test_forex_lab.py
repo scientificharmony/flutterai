@@ -635,6 +635,7 @@ def test_execute_forex_entry_alert_places_ig_demo_trade(client, db_engine, monke
             size=size,
         ),
     )
+    monkeypatch.setattr(forex, "find_matching_ig_position", lambda pair, direction: None)
 
     client.get("/forex/summary", headers={"device-id": "forex-execute-alert-user"})
     with Session(db_engine) as session:
@@ -854,3 +855,164 @@ def test_ig_snapshot_uses_short_cache(monkeypatch):
     assert second is first
     assert first.price == 1.15
     assert len(calls) == 2
+
+
+def test_execute_forex_entry_alert_falls_back_to_open_position_when_confirm_missing(client, db_engine, monkeypatch):
+    from sqlmodel import Session, select
+
+    from config import settings
+    from models.db_models import ForexEntryAlert, User
+    from services.forex_service import IgOpenPosition, IgPlacedPosition
+    from routers import forex
+
+    monkeypatch.setattr(forex.settings, "forex_provider", "ig")
+    monkeypatch.setattr(forex.settings, "ig_account_type", "DEMO")
+    monkeypatch.setattr(forex.settings, "forex_ig_demo_size", 0.5)
+    monkeypatch.setattr(forex.settings, "forex_execution_max_slippage_pips", 15)
+    monkeypatch.setattr(forex, "get_forex_mid_price", lambda pair: 1.05596)
+    monkeypatch.setattr(
+        forex,
+        "place_ig_demo_position",
+        lambda pair, direction, size, stop_level, limit_level: IgPlacedPosition(
+            deal_id="",
+            deal_reference="REFONLY",
+            epic="CS.D.NZDUSD.CFD.IP",
+            direction="SELL",
+            size=size,
+        ),
+    )
+    monkeypatch.setattr(
+        forex,
+        "find_matching_ig_position",
+        lambda pair, direction: IgOpenPosition(
+            deal_id="DIFALLBACK",
+            epic="CS.D.NZDUSD.CFD.IP",
+            direction="SELL",
+            size=0.5,
+            created_date="2026-05-14T00:00:00Z",
+            instrument_name="NZD/USD Mini",
+        ),
+    )
+
+    client.get("/forex/summary", headers={"device-id": "forex-execute-fallback-user"})
+    with Session(db_engine) as session:
+        user = session.exec(select(User).where(User.device_id == settings.TEST_USER_ID)).first()
+        assert user is not None
+        alert = ForexEntryAlert(
+            user_id=user.id,
+            pair="NZD/USD",
+            direction="SHORT",
+            strength=82,
+            entry_price=1.05595,
+            stop_loss=1.05945,
+            take_profit=1.04895,
+            risk_amount=50,
+            position_units=14285,
+            rationale="Practice-only IG demo snapshot.",
+            push_sent=True,
+        )
+        session.add(alert)
+        session.commit()
+        session.refresh(alert)
+        alert_id = alert.id
+
+    response = client.post(
+        f"/forex/entry-alerts/{alert_id}/execute-demo",
+        headers={"device-id": "forex-execute-fallback-user"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ig_linked"] is True
+
+
+def test_execute_forex_entry_alert_custom_uses_body_size_and_levels(client, db_engine, monkeypatch):
+    from sqlmodel import Session, select
+
+    from config import settings
+    from models.db_models import ForexEntryAlert, User
+    from services.forex_service import IgPlacedPosition
+    from routers import forex
+
+    monkeypatch.setattr(forex.settings, "forex_provider", "ig")
+    monkeypatch.setattr(forex.settings, "ig_account_type", "DEMO")
+    monkeypatch.setattr(forex.settings, "forex_execution_max_slippage_pips", 15)
+    monkeypatch.setattr(forex, "get_forex_mid_price", lambda pair: 1.05596)
+
+    captured = {}
+
+    def _place(pair, direction, size, stop_level, limit_level):
+        captured.update(
+            pair=pair,
+            direction=direction,
+            size=size,
+            stop_level=stop_level,
+            limit_level=limit_level,
+        )
+        return IgPlacedPosition(
+            deal_id="DICUSTOM",
+            deal_reference="REFCUSTOM",
+            epic="CS.D.GBPCHF.CFD.IP",
+            direction="SELL",
+            size=size,
+        )
+
+    monkeypatch.setattr(forex, "place_ig_demo_position", _place)
+    monkeypatch.setattr(forex, "find_matching_ig_position", lambda pair, direction: None)
+
+    client.get("/forex/summary", headers={"device-id": "forex-execute-custom-user"})
+    with Session(db_engine) as session:
+        user = session.exec(select(User).where(User.device_id == settings.TEST_USER_ID)).first()
+        assert user is not None
+        alert = ForexEntryAlert(
+            user_id=user.id,
+            pair="TEST/PAIR",
+            direction="SHORT",
+            strength=82,
+            entry_price=1.05595,
+            stop_loss=1.05945,
+            take_profit=1.04895,
+            risk_amount=50,
+            position_units=14285,
+            rationale="Practice-only IG demo snapshot.",
+            push_sent=True,
+        )
+        session.add(alert)
+        session.commit()
+        session.refresh(alert)
+        alert_id = alert.id
+
+    response = client.post(
+        f"/forex/entry-alerts/{alert_id}/execute-demo-custom",
+        headers={"device-id": "forex-execute-custom-user"},
+        json={"size": 0.7, "stop_loss": 1.06, "take_profit": 1.049},
+    )
+    assert response.status_code == 200
+    assert captured["size"] == 0.7
+    assert captured["stop_level"] == 1.06
+    assert captured["limit_level"] == 1.049
+
+
+def test_positions_endpoint_syncs_missing_ig_positions(client, db_engine, monkeypatch):
+    from config import settings
+    from routers import forex_positions
+    from services.forex_service import IgOpenPosition
+
+    monkeypatch.setattr(forex_positions, "get_ig_open_positions", lambda: [
+        IgOpenPosition(
+            deal_id="DISYNC1",
+            epic="CS.D.USDCHF.CFD.IP",
+            direction="BUY",
+            size=0.5,
+            level=0.78321,
+            stop_level=0.77862,
+            limit_level=0.78912,
+            instrument_name="USD/CHF Mini",
+        )
+    ])
+
+    client.get("/forex/summary", headers={"device-id": "forex-sync-user"})
+    response = client.get("/forex/positions", headers={"device-id": "forex-sync-user"})
+    assert response.status_code == 200
+    body = response.json()
+    assert any(p.get("ig_linked") and p.get("ig_deal_id") == "DISYNC1" for p in body)

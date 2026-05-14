@@ -88,6 +88,9 @@ class IgOpenPosition:
     epic: str
     direction: str
     size: float
+    level: float | None = None
+    stop_level: float | None = None
+    limit_level: float | None = None
     created_date: str | None = None
     instrument_name: str | None = None
 
@@ -383,6 +386,9 @@ def get_ig_open_positions() -> list[IgOpenPosition]:
         epic = market.get("epic") or position.get("epic")
         direction = position.get("direction")
         size = position.get("size")
+        level = position.get("level")
+        stop_level = position.get("stopLevel")
+        limit_level = position.get("limitLevel")
         instrument_name = market.get("instrumentName") or market.get("marketName") or market.get("name")
         if deal_id and epic and direction and size is not None:
             positions.append(
@@ -391,11 +397,27 @@ def get_ig_open_positions() -> list[IgOpenPosition]:
                     epic=epic,
                     direction=str(direction).upper(),
                     size=float(size),
+                    level=float(level) if level is not None else None,
+                    stop_level=float(stop_level) if stop_level is not None else None,
+                    limit_level=float(limit_level) if limit_level is not None else None,
                     created_date=position.get("createdDate") or position.get("createdDateUTC"),
                     instrument_name=instrument_name,
                 )
             )
     return positions
+
+
+def infer_pair_from_ig_position(epic: str, instrument_name: str | None = None) -> str | None:
+    """
+    Best-effort mapping from IG epic/instrument text to our canonical 'AAA/BBB' pair.
+    Used to sync IG-open positions back into Hey Jimmy tracking when the user places
+    a trade manually on IG (or closes a tracked trade in-app by mistake).
+    """
+    dummy = IgOpenPosition(deal_id="x", epic=epic, direction="BUY", size=0.1, instrument_name=instrument_name)
+    for pair in DEFAULT_FOREX_PAIRS:
+        if _position_matches_pair(dummy, pair, searched_epic=None):
+            return pair
+    return None
 
 
 def find_matching_ig_position(

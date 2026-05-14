@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from auth import get_current_user
@@ -7,9 +8,14 @@ from database import get_session
 from models.db_models import ForexEntryAlert, ForexPosition, User
 from models.schemas import ForexEntryAlertResponse, ForexScanRequest, ForexSummaryResponse
 from routers.forex_positions import ForexPositionResponse, _to_response
-from services.forex_service import get_forex_mid_price, get_forex_summary, place_ig_demo_position
+from services.forex_service import find_matching_ig_position, get_forex_mid_price, get_forex_summary, place_ig_demo_position
 
 router = APIRouter(prefix="/forex", tags=["forex"])
+
+class ForexExecuteCustomBody(BaseModel):
+    size: float = Field(..., gt=0, le=50)
+    stop_loss: float
+    take_profit: float
 
 
 @router.get("/summary", response_model=ForexSummaryResponse)
@@ -111,6 +117,15 @@ def execute_forex_entry_alert_demo(
         stop_level=alert.stop_loss,
         limit_level=alert.take_profit,
     )
+    deal_id = placed.deal_id
+    if not deal_id:
+        # Confirm endpoint can lag; fall back to the most recent matching open position.
+        try:
+            matched = find_matching_ig_position(alert.pair, alert.direction)
+        except Exception:
+            matched = None
+        if matched:
+            deal_id = matched.deal_id
     pos = ForexPosition(
         user_id=user.id,
         pair=alert.pair,
@@ -121,7 +136,86 @@ def execute_forex_entry_alert_demo(
         risk_amount=alert.risk_amount,
         position_units=alert.position_units,
         timeframe=alert.timeframe,
-        ig_deal_id=placed.deal_id or placed.deal_reference,
+        ig_deal_id=deal_id or placed.deal_reference,
+        ig_epic=placed.epic,
+        ig_size=placed.size,
+    )
+    session.add(pos)
+    session.commit()
+    session.refresh(pos)
+    return _to_response(pos, get_forex_mid_price(pos.pair))
+
+
+@router.post("/entry-alerts/{alert_id}/execute-demo-custom", response_model=ForexPositionResponse)
+def execute_forex_entry_alert_demo_custom(
+    alert_id: str,
+    body: ForexExecuteCustomBody,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    if settings.IG_ACCOUNT_TYPE.upper() != "DEMO":
+        raise HTTPException(status_code=403, detail="Forex execution is only enabled for IG DEMO accounts.")
+    if settings.FOREX_PROVIDER.lower() != "ig":
+        raise HTTPException(status_code=422, detail="IG forex provider is not configured.")
+
+    alert = session.get(ForexEntryAlert, alert_id)
+    if not alert or alert.user_id != user.id or not alert.push_sent:
+        raise HTTPException(status_code=404, detail="Forex entry alert not found.")
+    if alert.direction not in {"LONG", "SHORT"}:
+        raise HTTPException(status_code=422, detail="Only LONG or SHORT alerts can be executed.")
+
+    if body.stop_loss == body.take_profit:
+        raise HTTPException(status_code=422, detail="Stop and target cannot be the same.")
+
+    # Reuse existing open position if already tracked for this (pair,direction)
+    existing = session.exec(
+        select(ForexPosition).where(
+            ForexPosition.user_id == user.id,
+            ForexPosition.pair == alert.pair,
+            ForexPosition.direction == alert.direction,
+            ForexPosition.status == "open",
+        )
+    ).first()
+    if existing:
+        return _to_response(existing, get_forex_mid_price(existing.pair))
+
+    current_price = get_forex_mid_price(alert.pair)
+    if current_price is None:
+        raise HTTPException(status_code=422, detail="Current IG price is unavailable.")
+    max_slippage = settings.FOREX_EXECUTION_MAX_SLIPPAGE_PIPS * _pip_size(alert.pair)
+    if abs(current_price - alert.entry_price) > max_slippage:
+        raise HTTPException(
+            status_code=409,
+            detail="Market moved too far from the alert entry. Refresh and wait for a new setup.",
+        )
+
+    placed = place_ig_demo_position(
+        pair=alert.pair,
+        direction=alert.direction,
+        size=body.size,
+        stop_level=body.stop_loss,
+        limit_level=body.take_profit,
+    )
+    deal_id = placed.deal_id
+    if not deal_id:
+        try:
+            matched = find_matching_ig_position(alert.pair, alert.direction)
+        except Exception:
+            matched = None
+        if matched:
+            deal_id = matched.deal_id
+
+    pos = ForexPosition(
+        user_id=user.id,
+        pair=alert.pair,
+        direction=alert.direction,
+        entry_price=current_price,
+        stop_loss=body.stop_loss,
+        take_profit=body.take_profit,
+        risk_amount=alert.risk_amount,
+        position_units=alert.position_units,
+        timeframe=alert.timeframe,
+        ig_deal_id=deal_id or placed.deal_reference,
         ig_epic=placed.epic,
         ig_size=placed.size,
     )

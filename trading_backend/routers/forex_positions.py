@@ -8,7 +8,12 @@ from sqlmodel import Session, select
 from auth import get_current_user
 from database import get_session
 from models.db_models import ForexPosition, User
-from services.forex_service import find_matching_ig_position, get_forex_mid_price
+from services.forex_service import (
+    find_matching_ig_position,
+    get_forex_mid_price,
+    get_ig_open_positions,
+    infer_pair_from_ig_position,
+)
 
 router = APIRouter(prefix="/forex/positions", tags=["forex"])
 
@@ -40,6 +45,8 @@ class ForexPositionResponse(BaseModel):
     timeframe: str
     status: str
     ig_linked: bool
+    ig_deal_id: Optional[str] = None
+    ig_size: Optional[float] = None
     current_price: Optional[float]
     current_pnl: Optional[float]
     current_pnl_pct: Optional[float]
@@ -102,6 +109,8 @@ def _to_response(pos: ForexPosition, current_price: Optional[float] = None) -> F
         timeframe=pos.timeframe,
         status=pos.status,
         ig_linked=bool(pos.ig_deal_id),
+        ig_deal_id=pos.ig_deal_id,
+        ig_size=pos.ig_size,
         current_price=round(price, 5) if price is not None else None,
         current_pnl=pnl,
         current_pnl_pct=pnl_pct,
@@ -136,11 +145,66 @@ def _link_unlinked_ig_positions(positions: list[ForexPosition], session: Session
         session.commit()
 
 
+def _sync_missing_ig_positions(user: User, session: Session) -> None:
+    """
+    If the user manually opens positions on IG (or accidentally closes a trade in-app),
+    our DB can miss those open IG positions. This imports any IG-open positions that
+    don't already exist in the DB by dealId.
+    """
+    try:
+        ig_positions = get_ig_open_positions()
+    except Exception:
+        return
+    if not ig_positions:
+        return
+
+    rows = session.exec(
+        select(ForexPosition.ig_deal_id)
+        .where(ForexPosition.user_id == user.id)
+        .where(ForexPosition.ig_deal_id != None)
+    ).all()
+    existing_deals = {row for row in rows if row}
+
+    changed = False
+    for ig in ig_positions:
+        if ig.deal_id in existing_deals:
+            continue
+        pair = infer_pair_from_ig_position(ig.epic, ig.instrument_name)
+        if not pair:
+            continue
+        direction = "LONG" if ig.direction.upper() == "BUY" else "SHORT"
+        entry = ig.level if ig.level is not None else (get_forex_mid_price(pair) or 0.0)
+        stop = ig.stop_level if ig.stop_level is not None else entry
+        limit = ig.limit_level if ig.limit_level is not None else entry
+        pos = ForexPosition(
+            user_id=user.id,
+            pair=pair,
+            direction=direction,
+            entry_price=float(entry),
+            stop_loss=float(stop),
+            take_profit=float(limit),
+            risk_amount=0.0,
+            position_units=0,
+            timeframe="15m",
+            status="open",
+            ig_deal_id=ig.deal_id,
+            ig_epic=ig.epic,
+            ig_size=ig.size,
+        )
+        session.add(pos)
+        existing_deals.add(ig.deal_id)
+        changed = True
+
+    if changed:
+        session.commit()
+
+
 @router.get("", response_model=list[ForexPositionResponse])
 def list_forex_positions(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
+    _sync_missing_ig_positions(user, session)
     positions = session.exec(
         select(ForexPosition)
         .where(ForexPosition.user_id == user.id)
