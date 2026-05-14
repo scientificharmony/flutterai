@@ -31,6 +31,23 @@ _MOCK_CFD_PRICES = {
     "Tesla Motors Inc": 445.0,
 }
 
+# Avoid hammering IG's /markets search endpoint (which can intermittently 403) by caching
+# successful market->epic resolutions and trying a small alias set before giving up.
+_EPIC_CACHE: dict[str, str] = {}
+_EPIC_OVERRIDES: dict[str, str] = {
+    # Known-good from logs.
+    "FTSE 100 Cash": "IX.D.FTSE.CFD.IP",
+}
+_SEARCH_ALIASES: dict[str, list[str]] = {
+    "Germany 40 Cash": ["Germany 40", "DAX", "Germany"],
+    "Wall Street Cash": ["Wall Street", "Dow", "US 30"],
+    "US Tech 100 Cash": ["US Tech 100", "Nasdaq", "US 100"],
+    "Oil - Brent Crude": ["Brent", "Brent Crude", "Oil Brent"],
+    "Apple Inc": ["Apple", "AAPL"],
+    "Amazon.com Inc": ["Amazon", "AMZN"],
+    "Tesla Motors Inc": ["Tesla", "TSLA"],
+}
+
 
 @dataclass
 class CfdMarketSnapshot:
@@ -68,12 +85,12 @@ def _mock_snapshot(market: str) -> CfdMarketSnapshot:
     )
 
 
-def _search_ig_market(market: str) -> str | None:
+def _search_ig_market_raw(search_term: str) -> str | None:
     session = _get_ig_session()
     response = httpx.get(
         f"{_ig_base_url()}/markets",
         headers=_ig_headers(session=session),
-        params={"searchTerm": market},
+        params={"searchTerm": search_term},
         timeout=12.0,
     )
     response.raise_for_status()
@@ -81,7 +98,7 @@ def _search_ig_market(market: str) -> str | None:
     if not markets:
         return None
 
-    market_key = _normalise(market)
+    market_key = _normalise(search_term)
     preferred = None
     for item in markets:
         epic = item.get("epic")
@@ -98,9 +115,35 @@ def _normalise(value: str | None) -> str:
     return "".join(ch for ch in (value or "").upper() if ch.isalnum())
 
 
+def _resolve_epic(market: str) -> str | None:
+    # If the UI passes an epic directly, accept it.
+    if "." in market and market.count(".") >= 2:
+        return market
+
+    if market in _EPIC_OVERRIDES:
+        return _EPIC_OVERRIDES[market]
+
+    cached = _EPIC_CACHE.get(market)
+    if cached:
+        return cached
+
+    # Try primary name + a few aliases.
+    candidates = [market] + _SEARCH_ALIASES.get(market, [])
+    for term in candidates:
+        try:
+            epic = _search_ig_market_raw(term)
+        except Exception as exc:
+            logger.warning("IG CFD market search failed for %s (term=%s): %s", market, term, exc)
+            continue
+        if epic:
+            _EPIC_CACHE[market] = epic
+            return epic
+    return None
+
+
 def _ig_snapshot(market: str) -> CfdMarketSnapshot | None:
     session = _get_ig_session()
-    epic = _search_ig_market(market)
+    epic = _resolve_epic(market)
     if not epic:
         return None
     response = httpx.get(
@@ -148,8 +191,13 @@ def _market_snapshots(markets: list[str]) -> list[CfdMarketSnapshot]:
             snapshot = None
         if snapshot:
             snapshots.append(snapshot)
-        else:
-            logger.info("IG CFD snapshot unavailable for %s; market skipped.", market)
+            continue
+
+        # Keep CFD Lab usable even when IG blocks a lookup: return a clearly-marked fallback snapshot.
+        logger.info("IG CFD snapshot unavailable for %s; using mock fallback.", market)
+        fallback = _mock_snapshot(market)
+        fallback.source = "mock_fallback"
+        snapshots.append(fallback)
     return snapshots
 
 
@@ -200,7 +248,11 @@ def build_signal(snapshot: CfdMarketSnapshot, timeframe: str) -> CfdSignalRespon
         risk_amount=risk_amount(),
         contract_size=0.1 if direction != "NO_TRADE" else 0.0,
         rationale=(
-            f"Practice-only IG demo CFD snapshot. Market status: {snapshot.market_status or 'unknown'}."
+            (
+                f"Practice-only IG demo CFD snapshot. Market status: {snapshot.market_status or 'unknown'}."
+                if snapshot.source == "ig"
+                else "Mock fallback snapshot (IG lookup failed). Do not trade based on this fallback."
+            )
             if direction != "NO_TRADE"
             else "No practice CFD trade: signal strength is below the CFD Lab gate."
         ),

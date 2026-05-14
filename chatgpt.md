@@ -5158,3 +5158,28 @@ Fix:
 Follow-up fix:
 - If a dealId exists in the DB but was marked `closed` by mistake while still open on IG, `/forex/positions` now revives that row back to `open` instead of skipping it.
 
+---
+
+## 2026-05-14 — CFD Lab Reliability + Push Threshold Tuning
+
+### Problem
+- CFD Lab could become unusable because IG `/markets?searchTerm=...` intermittently returns `403 Forbidden` for some market strings (notably several index/commodity/stock CFD names).
+- When that happens, CFD snapshots were skipped, so `/cfd/summary` returned fewer markets (sometimes none).
+
+### Fix
+Backend `trading_backend/services/cfd_service.py`:
+- Added an in-process cache for resolved `market -> epic` lookups to reduce calls to IG search.
+- Added a small alias list per market (e.g. "US Tech 100 Cash" tries "Nasdaq", etc.) before giving up.
+- Added a known-good epic override for FTSE (`IX.D.FTSE.CFD.IP`) based on observed production logs.
+- If an IG lookup still fails, CFD Lab returns a clearly-marked `mock_fallback` snapshot for that market so the page stays populated. The signal rationale warns not to trade based on fallback data.
+
+### Notification tuning (invest + scanners)
+Backend `trading_backend/config.py` defaults updated:
+- `min_push_action_strength`: `75 -> 70`
+- `max_alerts_per_day`: `5 -> 15`
+
+### What Are "WATCH pushes"?
+The scanner has an internal action `WATCH` for non-actionable results.
+- `WATCH` outcomes are intentionally not persisted and do not trigger push notifications.
+- Only actionable outcomes (for example `BUY_REVIEW`) can become an alert/push, and they are still gated by `min_push_action_strength` and the daily alert limit.
+

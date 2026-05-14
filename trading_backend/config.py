@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     admin_api_token: str = ""
     daily_ai_budget_gbp: float = 2.0
     max_claude_calls_per_day: int = 20
-    max_alerts_per_day: int = 5
+    max_alerts_per_day: int = 15
     database_url: str = "sqlite:///./hey_jimmy.db"
     firebase_service_account_path: str = ""
     free_scans_per_day: int = 3
@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     max_risk_pct: float = 10.0
     quiet_hours_start: int = 22
     quiet_hours_end: int = 8
-    min_push_action_strength: int = 75
+    min_push_action_strength: int = 70
     scheduled_min_formula_score_for_claude: int = 70
     sell_target_pct: float = 8.0
     stop_loss_pct: float = 5.0
