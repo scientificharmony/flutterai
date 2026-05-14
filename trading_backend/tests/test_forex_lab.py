@@ -36,6 +36,35 @@ def test_default_forex_universe_has_expanded_liquid_pairs():
     assert "GBP/CAD" in DEFAULT_FOREX_PAIRS
 
 
+def test_ig_snapshot_failure_falls_back_per_pair(monkeypatch):
+    from services import forex_service
+
+    monkeypatch.setattr(forex_service, "provider_connected", lambda: True)
+    monkeypatch.setattr(forex_service, "_get_ig_session", lambda: object())
+
+    def fake_snapshot(pair, session):
+        if pair == "GBP/CHF":
+            raise RuntimeError("unsupported market")
+        return forex_service.ForexMarketSnapshot(
+            pair=pair,
+            price=1.2345,
+            bid=1.2344,
+            offer=1.2346,
+            epic=f"CS.D.{pair.replace('/', '')}.CFD.IP",
+            market_status="TRADEABLE",
+            source="ig",
+        )
+
+    monkeypatch.setattr(forex_service, "_ig_snapshot", fake_snapshot)
+
+    snapshots = forex_service._market_snapshots(["EUR/USD", "GBP/CHF"])
+
+    assert snapshots[0].source == "ig"
+    assert snapshots[0].price == 1.2345
+    assert snapshots[1].source == "mock"
+    assert snapshots[1].pair == "GBP/CHF"
+
+
 def test_forex_summary_uses_ig_snapshot_when_configured(monkeypatch):
     import httpx
     from services import forex_service

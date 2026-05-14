@@ -320,34 +320,8 @@ def close_ig_position(deal_id: str, direction: str, size: float) -> str:
 
 
 def _market_snapshots(pairs: list[str]) -> list[ForexMarketSnapshot]:
-    if not provider_connected():
-        return [
-            ForexMarketSnapshot(
-                pair=pair,
-                price=_MOCK_PRICES.get(pair, 1.0),
-                bid=None,
-                offer=None,
-                epic=None,
-                market_status=None,
-                source="mock",
-            )
-            for pair in pairs
-        ]
-
-    try:
-        session = _get_ig_session()
-        snapshots = []
-        for pair in pairs:
-            snapshot = _ig_snapshot(pair, session)
-            if snapshot:
-                snapshots.append(snapshot)
-        if snapshots:
-            return snapshots
-    except Exception as exc:
-        logger.warning("IG forex snapshot fetch failed; falling back to mock prices: %s", exc)
-
-    return [
-        ForexMarketSnapshot(
+    def mock_snapshot(pair: str) -> ForexMarketSnapshot:
+        return ForexMarketSnapshot(
             pair=pair,
             price=_MOCK_PRICES.get(pair, 1.0),
             bid=None,
@@ -356,8 +330,25 @@ def _market_snapshots(pairs: list[str]) -> list[ForexMarketSnapshot]:
             market_status=None,
             source="mock",
         )
-        for pair in pairs
-    ]
+
+    if not provider_connected():
+        return [mock_snapshot(pair) for pair in pairs]
+
+    try:
+        session = _get_ig_session()
+    except Exception as exc:
+        logger.warning("IG forex login failed; falling back to mock prices: %s", exc)
+        return [mock_snapshot(pair) for pair in pairs]
+
+    snapshots = []
+    for pair in pairs:
+        try:
+            snapshot = _ig_snapshot(pair, session)
+        except Exception as exc:
+            logger.warning("IG forex snapshot fetch failed for %s; using mock price: %s", pair, exc)
+            snapshot = None
+        snapshots.append(snapshot or mock_snapshot(pair))
+    return snapshots
 
 
 def build_signal(snapshot: ForexMarketSnapshot, timeframe: str) -> ForexSignalResponse:

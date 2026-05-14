@@ -4777,3 +4777,23 @@ Rationale:
 - More pairs should create more opportunities without lowering signal quality.
 - Increasing frequency first would likely create more noise and spread-sensitive false positives.
 
+### Follow-up fix
+
+After deploy, `/forex/summary` showed:
+
+```text
+provider: ig
+connected: true
+rationale: Practice-only mock setup until an IG demo connector is configured.
+```
+
+Root cause:
+- `_market_snapshots` handled the whole pair loop in one try/except.
+- If any one expanded pair failed IG lookup, the function returned mock prices for every pair.
+
+Fix:
+- IG login failure still falls back to all mock prices.
+- Individual pair lookup failures now fall back only for that pair.
+- Other pairs with valid IG snapshots remain IG-backed and keep `Market status: TRADEABLE`.
+- Added a regression test for per-pair fallback.
+
