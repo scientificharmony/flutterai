@@ -36,9 +36,10 @@ def test_default_forex_universe_has_expanded_liquid_pairs():
     assert "GBP/CAD" in DEFAULT_FOREX_PAIRS
 
 
-def test_ig_snapshot_failure_falls_back_per_pair(monkeypatch):
+def test_ig_snapshot_failure_skips_only_failed_pair(monkeypatch):
     from services import forex_service
 
+    monkeypatch.setattr(forex_service.settings, "forex_provider", "ig")
     monkeypatch.setattr(forex_service, "provider_connected", lambda: True)
     monkeypatch.setattr(forex_service, "_get_ig_session", lambda: object())
 
@@ -59,10 +60,10 @@ def test_ig_snapshot_failure_falls_back_per_pair(monkeypatch):
 
     snapshots = forex_service._market_snapshots(["EUR/USD", "GBP/CHF"])
 
+    assert len(snapshots) == 1
+    assert snapshots[0].pair == "EUR/USD"
     assert snapshots[0].source == "ig"
     assert snapshots[0].price == 1.2345
-    assert snapshots[1].source == "mock"
-    assert snapshots[1].pair == "GBP/CHF"
 
 
 def test_forex_summary_uses_ig_snapshot_when_configured(monkeypatch):

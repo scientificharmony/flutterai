@@ -4797,3 +4797,15 @@ Fix:
 - Other pairs with valid IG snapshots remain IG-backed and keep `Market status: TRADEABLE`.
 - Added a regression test for per-pair fallback.
 
+### Mock removal update
+
+User asked to move away from mock data.
+
+Changed IG mode behavior:
+- `FOREX_PROVIDER=mock` still uses mock signals for local/demo development.
+- `FOREX_PROVIDER=ig` with incomplete credentials returns no forex snapshots instead of fake prices.
+- IG login failure returns no forex snapshots instead of fake prices.
+- Individual IG pair lookup failures now skip that pair instead of returning a mock trade.
+
+This keeps the Forex Lab from showing fake actionable prices when the app is supposed to be connected to IG.
+

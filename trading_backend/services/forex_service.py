@@ -331,23 +331,30 @@ def _market_snapshots(pairs: list[str]) -> list[ForexMarketSnapshot]:
             source="mock",
         )
 
-    if not provider_connected():
+    if settings.FOREX_PROVIDER.lower() == "mock":
         return [mock_snapshot(pair) for pair in pairs]
+
+    if not provider_connected():
+        logger.warning("IG forex provider is selected but credentials are incomplete; no forex snapshots returned.")
+        return []
 
     try:
         session = _get_ig_session()
     except Exception as exc:
-        logger.warning("IG forex login failed; falling back to mock prices: %s", exc)
-        return [mock_snapshot(pair) for pair in pairs]
+        logger.warning("IG forex login failed; no forex snapshots returned: %s", exc)
+        return []
 
     snapshots = []
     for pair in pairs:
         try:
             snapshot = _ig_snapshot(pair, session)
         except Exception as exc:
-            logger.warning("IG forex snapshot fetch failed for %s; using mock price: %s", pair, exc)
+            logger.warning("IG forex snapshot fetch failed for %s; skipping pair: %s", pair, exc)
             snapshot = None
-        snapshots.append(snapshot or mock_snapshot(pair))
+        if snapshot:
+            snapshots.append(snapshot)
+        else:
+            logger.info("IG forex snapshot unavailable for %s; pair skipped.", pair)
     return snapshots
 
 
