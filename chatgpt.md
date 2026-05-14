@@ -4924,3 +4924,29 @@ Expected:
 - The Android app shows a new CFD Lab shortcut and page.
 - CFD Lab is observation/manual-practice only until a later Level 2 implementation.
 
+## 2026-05-14 - Forex pushed alert recovery
+
+Problem found:
+- A pushed forex entry setup could disappear from the Forex Lab after the app was closed and reopened.
+- Root cause: the app rendered the current live `/forex/summary` snapshot only. The backend already stored pushed setups in `forex_entry_alerts`, but the app did not read that history.
+
+Change made:
+- Added `GET /forex/entry-alerts`.
+- The endpoint returns recent pushed forex entry alerts for the current device user.
+- Each alert includes pair, direction, strength, entry, stop, target, risk, units, rationale, created time, and a `tracked` flag.
+- `tracked=true` means the user already has an open matching practice position for that pair/direction.
+
+App change:
+- Forex Lab now loads:
+  - `/forex/summary`
+  - `/forex/positions`
+  - `/forex/entry-alerts`
+- Added a `Recent entry alerts` section.
+- Recent pushed alerts stay visible after reopening the app.
+- Each alert can be marked with `I took this practice trade`.
+- If already tracked, the action is disabled and shown as `Practice trade is being tracked`.
+
+Why this matters:
+- If a notification is cleared by accident, the setup can still be recovered in the Forex Lab.
+- If the live market snapshot changes, the original pushed alert remains available long enough to record the manual IG demo trade.
+

@@ -541,3 +541,68 @@ def test_forex_entry_scanner_skips_existing_open_position(db_engine, monkeypatch
         assert alert is None
 
     assert sent == []
+
+
+def test_forex_entry_alerts_returns_recent_pushed_alerts(client, db_engine):
+    from sqlmodel import Session, select
+
+    from config import settings
+    from models.db_models import ForexEntryAlert, ForexPosition, User
+
+    client.get("/forex/summary", headers={"device-id": "forex-alert-history-user"})
+    with Session(db_engine) as session:
+        user = session.exec(select(User).where(User.device_id == settings.TEST_USER_ID)).first()
+        assert user is not None
+        session.add(
+            ForexEntryAlert(
+                user_id=user.id,
+                pair="GBP/CHF",
+                direction="SHORT",
+                strength=82,
+                entry_price=1.05595,
+                stop_loss=1.05945,
+                take_profit=1.04895,
+                risk_amount=50,
+                position_units=14285,
+                rationale="Practice-only IG demo snapshot.",
+                push_sent=True,
+            )
+        )
+        session.add(
+            ForexEntryAlert(
+                user_id=user.id,
+                pair="EUR/USD",
+                direction="SHORT",
+                strength=80,
+                entry_price=1.1697,
+                stop_loss=1.1732,
+                take_profit=1.1627,
+                risk_amount=50,
+                position_units=14285,
+                rationale="Practice-only IG demo snapshot.",
+                push_sent=False,
+            )
+        )
+        session.add(
+            ForexPosition(
+                user_id=user.id,
+                pair="GBP/CHF",
+                direction="SHORT",
+                entry_price=1.05595,
+                stop_loss=1.05945,
+                take_profit=1.04895,
+                risk_amount=50,
+                position_units=14285,
+                status="open",
+            )
+        )
+        session.commit()
+
+    response = client.get("/forex/entry-alerts", headers={"device-id": "forex-alert-history-user"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["pair"] == "GBP/CHF"
+    assert body[0]["direction"] == "SHORT"
+    assert body[0]["tracked"] is True

@@ -42,6 +42,7 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
   String _timeframe = '15m';
   ForexSummary? _summary;
   List<ForexPosition> _positions = const [];
+  List<ForexEntryAlert> _entryAlerts = const [];
   bool _loading = true;
   bool _savingTrade = false;
   String? _error;
@@ -65,9 +66,11 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
       final results = await Future.wait([
         http.get(Uri.parse(ApiConfig.forexSummary), headers: headers),
         http.get(Uri.parse(ApiConfig.forexPositions), headers: headers),
+        http.get(Uri.parse(ApiConfig.forexEntryAlerts), headers: headers),
       ]);
       final res = results[0];
       final positionsRes = results[1];
+      final alertsRes = results[2];
       if (res.statusCode == 200) {
         final summary = ForexSummary.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
         final positions = positionsRes.statusCode == 200
@@ -75,9 +78,15 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
                 .map((item) => ForexPosition.fromJson(item as Map<String, dynamic>))
                 .toList()
             : <ForexPosition>[];
+        final alerts = alertsRes.statusCode == 200
+            ? (jsonDecode(alertsRes.body) as List)
+                .map((item) => ForexEntryAlert.fromJson(item as Map<String, dynamic>))
+                .toList()
+            : <ForexEntryAlert>[];
         setState(() {
           _summary = summary;
           _positions = positions;
+          _entryAlerts = alerts;
           _riskBps = summary.riskBps;
           _minStrength = summary.minSignalStrength;
         });
@@ -93,6 +102,42 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
 
   Future<void> _takePracticeTrade(ForexSignal signal) async {
     if (signal.direction == 'NO_TRADE' || _savingTrade) return;
+    await _savePracticeTrade(
+      pair: signal.pair,
+      direction: signal.direction,
+      entryPrice: signal.entry,
+      stopLoss: signal.stopLoss,
+      takeProfit: signal.takeProfit,
+      riskAmount: signal.riskAmount,
+      positionUnits: signal.positionUnits,
+      timeframe: signal.timeframe,
+    );
+  }
+
+  Future<void> _takeEntryAlert(ForexEntryAlert alert) async {
+    if (_savingTrade || alert.tracked) return;
+    await _savePracticeTrade(
+      pair: alert.pair,
+      direction: alert.direction,
+      entryPrice: alert.entryPrice,
+      stopLoss: alert.stopLoss,
+      takeProfit: alert.takeProfit,
+      riskAmount: alert.riskAmount,
+      positionUnits: alert.positionUnits,
+      timeframe: alert.timeframe,
+    );
+  }
+
+  Future<void> _savePracticeTrade({
+    required String pair,
+    required String direction,
+    required double entryPrice,
+    required double stopLoss,
+    required double takeProfit,
+    required double riskAmount,
+    required int positionUnits,
+    required String timeframe,
+  }) async {
     setState(() => _savingTrade = true);
     try {
       final res = await http.post(
@@ -102,20 +147,20 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
           'Content-Type': 'application/json',
         },
         body: jsonEncode({
-          'pair': signal.pair,
-          'direction': signal.direction,
-          'entry_price': signal.entry,
-          'stop_loss': signal.stopLoss,
-          'take_profit': signal.takeProfit,
-          'risk_amount': signal.riskAmount,
-          'position_units': signal.positionUnits,
-          'timeframe': signal.timeframe,
+          'pair': pair,
+          'direction': direction,
+          'entry_price': entryPrice,
+          'stop_loss': stopLoss,
+          'take_profit': takeProfit,
+          'risk_amount': riskAmount,
+          'position_units': positionUnits,
+          'timeframe': timeframe,
         }),
       );
       if (!mounted) return;
       if (res.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${signal.pair} practice trade saved.')),
+          SnackBar(content: Text('$pair practice trade saved.')),
         );
         await _loadSummary();
       } else {
@@ -204,6 +249,21 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
             positions: _positions,
             onClose: _closePracticeTrade,
           ),
+          if (_entryAlerts.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text('Recent entry alerts',
+                style: GoogleFonts.orbitron(
+                    color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 10),
+            ..._entryAlerts.map((alert) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _EntryAlertTile(
+                    alert: alert,
+                    saving: _savingTrade,
+                    onTakeTrade: () => _takeEntryAlert(alert),
+                  ),
+                )),
+          ],
           const SizedBox(height: 12),
           Text('Practice signals',
               style: GoogleFonts.orbitron(
@@ -505,6 +565,87 @@ class _SignalTile extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _EntryAlertTile extends StatelessWidget {
+  final ForexEntryAlert alert;
+  final bool saving;
+  final VoidCallback onTakeTrade;
+
+  const _EntryAlertTile({
+    required this.alert,
+    required this.saving,
+    required this.onTakeTrade,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = alert.direction == 'LONG' ? AppColors.green : AppColors.pink;
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(alert.pair,
+                  style: GoogleFonts.orbitron(
+                      color: AppColors.textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(width: 8),
+              _ModeBadge(label: alert.direction, color: color),
+              const SizedBox(width: 8),
+              const _ModeBadge(label: 'PUSHED', color: AppColors.cyan),
+              const Spacer(),
+              Text('${alert.strength}/100',
+                  style: GoogleFonts.dmSans(color: color, fontWeight: FontWeight.w700)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(child: _Metric(label: 'Entry', value: alert.entryPrice.toStringAsFixed(5))),
+              Expanded(child: _Metric(label: 'Stop', value: alert.stopLoss.toStringAsFixed(5))),
+              Expanded(child: _Metric(label: 'Target', value: alert.takeProfit.toStringAsFixed(5))),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(child: _Metric(label: 'Risk', value: '£${alert.riskAmount.toStringAsFixed(0)}')),
+              Expanded(child: _Metric(label: 'Units', value: alert.positionUnits.toString())),
+              Expanded(child: _Metric(label: 'Frame', value: alert.timeframe)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(alert.rationale,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.dmSans(color: AppColors.textMuted, fontSize: 12)),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: saving || alert.tracked ? null : onTakeTrade,
+              icon: Icon(alert.tracked ? Icons.check_circle_outline : Icons.add_chart, size: 17),
+              label: Text(alert.tracked ? 'Practice trade is being tracked' : 'I took this practice trade'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: alert.tracked ? AppColors.textMuted : color,
+                side: BorderSide(color: (alert.tracked ? AppColors.border : color).withValues(alpha: 0.45)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -969,6 +1110,51 @@ class ForexSignal {
         riskAmount: (json['risk_amount'] as num).toDouble(),
         positionUnits: (json['position_units'] as num).toInt(),
         rationale: json['rationale'] as String,
+      );
+}
+
+class ForexEntryAlert {
+  final String id;
+  final String pair;
+  final String direction;
+  final int strength;
+  final String timeframe;
+  final double entryPrice;
+  final double stopLoss;
+  final double takeProfit;
+  final double riskAmount;
+  final int positionUnits;
+  final String rationale;
+  final bool tracked;
+
+  const ForexEntryAlert({
+    required this.id,
+    required this.pair,
+    required this.direction,
+    required this.strength,
+    required this.timeframe,
+    required this.entryPrice,
+    required this.stopLoss,
+    required this.takeProfit,
+    required this.riskAmount,
+    required this.positionUnits,
+    required this.rationale,
+    required this.tracked,
+  });
+
+  factory ForexEntryAlert.fromJson(Map<String, dynamic> json) => ForexEntryAlert(
+        id: json['id'] as String,
+        pair: json['pair'] as String,
+        direction: json['direction'] as String,
+        strength: (json['strength'] as num).toInt(),
+        timeframe: json['timeframe'] as String,
+        entryPrice: (json['entry_price'] as num).toDouble(),
+        stopLoss: (json['stop_loss'] as num).toDouble(),
+        takeProfit: (json['take_profit'] as num).toDouble(),
+        riskAmount: (json['risk_amount'] as num).toDouble(),
+        positionUnits: (json['position_units'] as num).toInt(),
+        rationale: json['rationale'] as String? ?? '',
+        tracked: json['tracked'] as bool? ?? false,
       );
 }
 

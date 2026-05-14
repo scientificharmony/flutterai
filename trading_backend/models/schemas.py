@@ -254,6 +254,23 @@ class ForexScanRequest(BaseModel):
     pairs: list[str] = Field(default_factory=list)
 
 
+class ForexEntryAlertResponse(BaseModel):
+    id: str
+    pair: str
+    direction: Literal["LONG", "SHORT"]
+    strength: int = Field(ge=0, le=100)
+    timeframe: str
+    entry_price: float
+    stop_loss: float
+    take_profit: float
+    risk_amount: float
+    position_units: int
+    rationale: str
+    push_sent: bool
+    tracked: bool
+    created_at: datetime
+
+
 # ── CFD Lab ──────────────────────────────────────────────────────────────────
 
 class CfdSignalResponse(BaseModel):
