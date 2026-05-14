@@ -89,6 +89,15 @@ class IgOpenPosition:
     instrument_name: str | None = None
 
 
+@dataclass
+class IgPlacedPosition:
+    deal_id: str
+    deal_reference: str
+    epic: str
+    direction: str
+    size: float
+
+
 _ig_session: IgSession | None = None
 _epic_cache: dict[str, str] = {}
 
@@ -297,6 +306,71 @@ def find_matching_ig_position(
     if not matches:
         return None
     return sorted(matches, key=lambda pos: pos.created_date or "", reverse=True)[0]
+
+
+def _currency_code_for_pair(pair: str) -> str:
+    if "/" not in pair:
+        return "GBP"
+    return pair.split("/", 1)[1].upper()
+
+
+def place_ig_demo_position(
+    pair: str,
+    direction: str,
+    size: float,
+    stop_level: float,
+    limit_level: float,
+) -> IgPlacedPosition:
+    if settings.IG_ACCOUNT_TYPE.upper() != "DEMO":
+        raise RuntimeError("IG forex execution is only allowed for DEMO accounts")
+    if size <= 0:
+        raise RuntimeError("IG forex execution size must be greater than zero")
+
+    session = _get_ig_session()
+    epic = _search_ig_epic(pair, session)
+    if not epic:
+        raise RuntimeError(f"IG epic unavailable for {pair}")
+
+    ig_direction = _position_direction_for_signal(direction)
+    response = httpx.post(
+        f"{_ig_base_url()}/positions/otc",
+        headers=_ig_headers(version="2", session=session),
+        json={
+            "epic": epic,
+            "expiry": "-",
+            "direction": ig_direction,
+            "size": size,
+            "orderType": "MARKET",
+            "currencyCode": _currency_code_for_pair(pair),
+            "forceOpen": True,
+            "guaranteedStop": False,
+            "stopLevel": round(stop_level, 5),
+            "limitLevel": round(limit_level, 5),
+        },
+        timeout=12.0,
+    )
+    response.raise_for_status()
+    deal_reference = response.json().get("dealReference", "")
+    deal_id = ""
+    if deal_reference:
+        try:
+            confirm = httpx.get(
+                f"{_ig_base_url()}/confirms/{deal_reference}",
+                headers=_ig_headers(session=session),
+                timeout=12.0,
+            )
+            confirm.raise_for_status()
+            confirm_data = confirm.json()
+            deal_id = confirm_data.get("dealId") or ""
+        except Exception as exc:
+            logger.warning("IG demo deal confirm failed for %s: %s", deal_reference, exc)
+    return IgPlacedPosition(
+        deal_id=deal_id,
+        deal_reference=deal_reference,
+        epic=epic,
+        direction=ig_direction,
+        size=size,
+    )
 
 
 def close_ig_position(deal_id: str, direction: str, size: float) -> str:

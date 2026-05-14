@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'theme/app_theme.dart';
 import 'screens/alert_detail_screen.dart';
+import 'screens/forex_lab_screen.dart';
 import 'screens/home_screen.dart';
 import 'services/device_service.dart';
 import 'services/fcm_service.dart';
@@ -47,7 +48,17 @@ class _AITradingAppState extends State<AITradingApp> {
   }
 
   void _initFcm() {
-    FcmService.instance.onAlertTap = (alertId) {
+    FcmService.instance.onNotificationTap = (data) {
+      final alertId = data['alert_id'] as String?;
+      if (alertId == null) return;
+      if (data['type'] == 'forex_entry_alert') {
+        _navigatorKey.currentState?.push(
+          MaterialPageRoute(
+            builder: (_) => ForexLabScreen(initialEntryAlertId: alertId),
+          ),
+        );
+        return;
+      }
       _navigatorKey.currentState?.push(
         MaterialPageRoute(
           builder: (_) => AlertDetailScreen(alertId: alertId),

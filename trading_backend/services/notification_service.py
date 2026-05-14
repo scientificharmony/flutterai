@@ -57,6 +57,7 @@ def send_trade_alert(
     alert_id: str,
     ticker: str,
     action_strength: int | None = None,
+    notification_type: str = "trade_alert",
 ) -> bool:
     """
     Send a push notification for a trade alert.
@@ -72,7 +73,7 @@ def send_trade_alert(
         message = messaging.Message(
             notification=messaging.Notification(title=title, body=body),
             data={
-                "type": "trade_alert",
+                "type": notification_type,
                 "alert_id": alert_id,
                 "ticker": ticker,
                 "action_strength": str(action_strength or 0),
@@ -93,10 +94,19 @@ def send_to_user_devices(
     alert_id: str,
     ticker: str,
     action_strength: int | None = None,
+    notification_type: str = "trade_alert",
 ) -> int:
     """Send to all user devices. Returns count of successful sends."""
     sent = 0
     for token in device_tokens:
-        if send_trade_alert(token, body=body, title=title, alert_id=alert_id, ticker=ticker, action_strength=action_strength):
+        if send_trade_alert(
+            token,
+            body=body,
+            title=title,
+            alert_id=alert_id,
+            ticker=ticker,
+            action_strength=action_strength,
+            notification_type=notification_type,
+        ):
             sent += 1
     return sent

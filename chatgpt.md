@@ -4950,3 +4950,42 @@ Why this matters:
 - If a notification is cleared by accident, the setup can still be recovered in the Forex Lab.
 - If the live market snapshot changes, the original pushed alert remains available long enough to record the manual IG demo trade.
 
+## 2026-05-14 - Manual-confirm IG demo execution from Forex alerts
+
+Goal:
+- Keep the user decision manual, but remove the need to open the IG web platform and type the order manually.
+
+Backend changes:
+- Added guarded IG demo order placement for forex alerts.
+- Added `POST /forex/entry-alerts/{alert_id}/execute-demo`.
+- The endpoint:
+  - only runs when `IG_ACCOUNT_TYPE=DEMO`;
+  - requires `FOREX_PROVIDER=ig`;
+  - rejects missing or unpushed alerts;
+  - rejects duplicate open pair/direction positions;
+  - checks current IG price has not moved too far from the original alert entry;
+  - places a market order on IG demo with stop and limit levels;
+  - creates the Hey Jimmy `forex_positions` row;
+  - stores the IG deal ID/reference, epic, and size so the 5-minute monitor can manage auto-close.
+
+New config:
+
+```env
+FOREX_IG_DEMO_SIZE=0.5
+FOREX_EXECUTION_MAX_SLIPPAGE_PIPS=15
+```
+
+Frontend changes:
+- Forex entry push notifications now carry `type=forex_entry_alert`.
+- Tapping a forex setup push opens Forex Lab instead of the stock alert detail screen.
+- Forex Lab can receive an initial entry alert ID and opens a confirmation popup after loading.
+- Recent entry alert cards now show `Proceed with demo trade`.
+- The confirmation popup shows pair, buy/sell direction, strength, entry, stop, target, IG size, and planned risk.
+- Tapping `Proceed with demo trade` calls the backend execution endpoint.
+- On success, the app refreshes and the trade appears under open practice trades as tracked.
+
+Safety state:
+- This is still demo-only.
+- There is still no silent auto-entry.
+- User must tap the confirmation button every time.
+

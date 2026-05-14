@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     enable_forex_entry_alerts: bool = True
     forex_entry_scan_minutes: int = 15
     forex_entry_cooldown_hours: int = 4
+    forex_ig_demo_size: float = 0.5
+    forex_execution_max_slippage_pips: int = 15
     ig_api_key: str = ""
     ig_username: str = ""
     ig_password: str = ""
@@ -130,6 +132,10 @@ class Settings(BaseSettings):
     def FOREX_ENTRY_SCAN_MINUTES(self) -> int: return self.forex_entry_scan_minutes
     @property
     def FOREX_ENTRY_COOLDOWN_HOURS(self) -> int: return self.forex_entry_cooldown_hours
+    @property
+    def FOREX_IG_DEMO_SIZE(self) -> float: return self.forex_ig_demo_size
+    @property
+    def FOREX_EXECUTION_MAX_SLIPPAGE_PIPS(self) -> int: return self.forex_execution_max_slippage_pips
     @property
     def IG_API_KEY(self) -> str: return self.ig_api_key
     @property

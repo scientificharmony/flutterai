@@ -103,7 +103,7 @@ def _maybe_alert_user(user: User, signal, session: Session) -> None:
     body = (
         f"Strength {signal.strength}/100. Entry {signal.entry:.5f}, "
         f"stop {signal.stop_loss:.5f}, target {signal.take_profit:.5f}. "
-        "Enter manually in IG demo, then tap I took this practice trade."
+        "Tap to review and place in IG demo."
     )
     sent = send_to_user_devices(
         [token.token for token in tokens],
@@ -112,6 +112,7 @@ def _maybe_alert_user(user: User, signal, session: Session) -> None:
         alert_id=alert.id,
         ticker=signal.pair,
         action_strength=signal.strength,
+        notification_type="forex_entry_alert",
     )
     if sent:
         alert.push_sent = True

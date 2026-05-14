@@ -19,7 +19,7 @@ class FcmService {
   final _localNotifications = FlutterLocalNotificationsPlugin();
 
   // Callback set by the app to navigate on notification tap
-  void Function(String alertId)? onAlertTap;
+  void Function(Map<String, dynamic> data)? onNotificationTap;
 
   Future<void> init() async {
     // Request permission (iOS)
@@ -46,8 +46,7 @@ class FcmService {
         final payload = details.payload;
         if (payload != null) {
           final data = jsonDecode(payload) as Map<String, dynamic>;
-          final alertId = data['alert_id'] as String?;
-          if (alertId != null) onAlertTap?.call(alertId);
+          onNotificationTap?.call(data);
         }
       },
     );
@@ -78,9 +77,12 @@ class FcmService {
 
     // App opened from notification tap
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
-      final alertId = message.data['alert_id'] as String?;
-      if (alertId != null) onAlertTap?.call(alertId);
+      onNotificationTap?.call(message.data);
     });
+    final initialMessage = await _messaging.getInitialMessage();
+    if (initialMessage != null) {
+      onNotificationTap?.call(initialMessage.data);
+    }
 
     // Register token with backend
     final token = await _messaging.getToken();

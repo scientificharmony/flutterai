@@ -256,7 +256,7 @@ def test_forex_monitor_notifies_when_status_changes(db_engine, monkeypatch):
     monkeypatch.setattr(
         forex_position_monitor_job,
         "send_to_user_devices",
-        lambda tokens, title, body, alert_id, ticker, action_strength=None: sent.append((title, body, ticker)) or 1,
+        lambda tokens, title, body, alert_id, ticker, action_strength=None, notification_type="trade_alert": sent.append((title, body, ticker)) or 1,
     )
 
     with Session(db_engine) as session:
@@ -393,7 +393,7 @@ def test_forex_entry_scanner_sends_setup_push(db_engine, monkeypatch):
     monkeypatch.setattr(
         forex_entry_scanner_job,
         "send_to_user_devices",
-        lambda tokens, title, body, alert_id, ticker, action_strength=None: sent.append((title, body, ticker)) or 1,
+        lambda tokens, title, body, alert_id, ticker, action_strength=None, notification_type="trade_alert": sent.append((title, body, ticker, notification_type)) or 1,
     )
 
     with Session(db_engine) as session:
@@ -419,6 +419,7 @@ def test_forex_entry_scanner_sends_setup_push(db_engine, monkeypatch):
 
     assert sent
     assert "Forex setup" in sent[0][0]
+    assert sent[0][3] == "forex_entry_alert"
 
     sent.clear()
     asyncio.run(forex_entry_scanner_job.run_forex_entry_scanner())
@@ -506,7 +507,7 @@ def test_forex_entry_scanner_skips_existing_open_position(db_engine, monkeypatch
     monkeypatch.setattr(
         forex_entry_scanner_job,
         "send_to_user_devices",
-        lambda tokens, title, body, alert_id, ticker, action_strength=None: sent.append((title, body, ticker)) or 1,
+        lambda tokens, title, body, alert_id, ticker, action_strength=None, notification_type="trade_alert": sent.append((title, body, ticker)) or 1,
     )
 
     with Session(db_engine) as session:
@@ -606,3 +607,65 @@ def test_forex_entry_alerts_returns_recent_pushed_alerts(client, db_engine):
     assert body[0]["pair"] == "GBP/CHF"
     assert body[0]["direction"] == "SHORT"
     assert body[0]["tracked"] is True
+
+
+def test_execute_forex_entry_alert_places_ig_demo_trade(client, db_engine, monkeypatch):
+    from sqlmodel import Session, select
+
+    from config import settings
+    from models.db_models import ForexEntryAlert, User
+    from services.forex_service import IgPlacedPosition
+    from routers import forex
+
+    monkeypatch.setattr(forex.settings, "forex_provider", "ig")
+    monkeypatch.setattr(forex.settings, "ig_account_type", "DEMO")
+    monkeypatch.setattr(forex.settings, "forex_ig_demo_size", 0.5)
+    monkeypatch.setattr(forex.settings, "forex_execution_max_slippage_pips", 15)
+    monkeypatch.setattr(forex, "get_forex_mid_price", lambda pair: 1.05596)
+    placed = []
+    monkeypatch.setattr(
+        forex,
+        "place_ig_demo_position",
+        lambda pair, direction, size, stop_level, limit_level: placed.append((pair, direction, size, stop_level, limit_level))
+        or IgPlacedPosition(
+            deal_id="DIPLACED",
+            deal_reference="REFPLACED",
+            epic="CS.D.GBPCHF.CFD.IP",
+            direction="SELL",
+            size=size,
+        ),
+    )
+
+    client.get("/forex/summary", headers={"device-id": "forex-execute-alert-user"})
+    with Session(db_engine) as session:
+        user = session.exec(select(User).where(User.device_id == settings.TEST_USER_ID)).first()
+        assert user is not None
+        alert = ForexEntryAlert(
+            user_id=user.id,
+            pair="NZD/USD",
+            direction="SHORT",
+            strength=82,
+            entry_price=1.05595,
+            stop_loss=1.05945,
+            take_profit=1.04895,
+            risk_amount=50,
+            position_units=14285,
+            rationale="Practice-only IG demo snapshot.",
+            push_sent=True,
+        )
+        session.add(alert)
+        session.commit()
+        session.refresh(alert)
+        alert_id = alert.id
+
+    response = client.post(
+        f"/forex/entry-alerts/{alert_id}/execute-demo",
+        headers={"device-id": "forex-execute-alert-user"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["pair"] == "NZD/USD"
+    assert body["direction"] == "SHORT"
+    assert body["ig_linked"] is True
+    assert placed == [("NZD/USD", "SHORT", 0.5, 1.05945, 1.04895)]

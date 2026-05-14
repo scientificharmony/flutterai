@@ -7,7 +7,9 @@ import '../services/device_service.dart';
 import '../theme/app_theme.dart';
 
 class ForexLabScreen extends StatefulWidget {
-  const ForexLabScreen({super.key});
+  final String? initialEntryAlertId;
+
+  const ForexLabScreen({super.key, this.initialEntryAlertId});
 
   @override
   State<ForexLabScreen> createState() => _ForexLabScreenState();
@@ -45,6 +47,7 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
   List<ForexEntryAlert> _entryAlerts = const [];
   bool _loading = true;
   bool _savingTrade = false;
+  String? _shownInitialEntryAlertId;
   String? _error;
 
   double get _balance => _summary?.demoBalance ?? 5000;
@@ -90,6 +93,7 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
           _riskBps = summary.riskBps;
           _minStrength = summary.minSignalStrength;
         });
+        _showInitialEntryAlertIfNeeded(alerts);
       } else {
         setState(() => _error = 'Forex summary failed (${res.statusCode})');
       }
@@ -116,16 +120,9 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
 
   Future<void> _takeEntryAlert(ForexEntryAlert alert) async {
     if (_savingTrade || alert.tracked) return;
-    await _savePracticeTrade(
-      pair: alert.pair,
-      direction: alert.direction,
-      entryPrice: alert.entryPrice,
-      stopLoss: alert.stopLoss,
-      takeProfit: alert.takeProfit,
-      riskAmount: alert.riskAmount,
-      positionUnits: alert.positionUnits,
-      timeframe: alert.timeframe,
-    );
+    final confirmed = await _confirmEntryAlert(alert);
+    if (confirmed != true) return;
+    await _executeEntryAlert(alert);
   }
 
   Future<void> _savePracticeTrade({
@@ -167,6 +164,86 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not save practice trade (${res.statusCode}).')),
         );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Forex backend unavailable.')),
+      );
+    } finally {
+      if (mounted) setState(() => _savingTrade = false);
+    }
+  }
+
+  void _showInitialEntryAlertIfNeeded(List<ForexEntryAlert> alerts) {
+    final targetId = widget.initialEntryAlertId;
+    if (targetId == null || _shownInitialEntryAlertId == targetId || !mounted) return;
+    final matches = alerts.where((alert) => alert.id == targetId && !alert.tracked).toList();
+    if (matches.isEmpty) return;
+    _shownInitialEntryAlertId = targetId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _takeEntryAlert(matches.first);
+    });
+  }
+
+  Future<bool?> _confirmEntryAlert(ForexEntryAlert alert) {
+    final color = alert.direction == 'LONG' ? AppColors.green : AppColors.pink;
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${alert.direction == 'LONG' ? 'BUY' : 'SELL'} ${alert.pair}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _DialogLine(label: 'Strength', value: '${alert.strength}/100'),
+            _DialogLine(label: 'Entry', value: alert.entryPrice.toStringAsFixed(5)),
+            _DialogLine(label: 'Stop', value: alert.stopLoss.toStringAsFixed(5)),
+            _DialogLine(label: 'Target', value: alert.takeProfit.toStringAsFixed(5)),
+            const _DialogLine(label: 'IG size', value: '0.5 contracts'),
+            _DialogLine(label: 'Planned risk', value: '£${alert.riskAmount.toStringAsFixed(0)}'),
+            const SizedBox(height: 10),
+            Text(
+              'Demo only. Hey Jimmy will place this in IG demo and start tracking it.',
+              style: GoogleFonts.dmSans(color: AppColors.textMuted, fontSize: 12),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: color),
+            child: const Text('Proceed with demo trade'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _executeEntryAlert(ForexEntryAlert alert) async {
+    setState(() => _savingTrade = true);
+    try {
+      final res = await http.post(
+        Uri.parse(ApiConfig.forexExecuteEntryAlert(alert.id)),
+        headers: {'device-id': DeviceService.instance.deviceId},
+      );
+      if (!mounted) return;
+      if (res.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${alert.pair} demo trade placed and tracked.')),
+        );
+        await _loadSummary();
+      } else {
+        String message = 'Could not place IG demo trade (${res.statusCode}).';
+        try {
+          final decoded = jsonDecode(res.body) as Map<String, dynamic>;
+          message = decoded['detail'] as String? ?? message;
+        } catch (_) {}
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
       }
     } catch (_) {
       if (!mounted) return;
@@ -638,13 +715,38 @@ class _EntryAlertTile extends StatelessWidget {
             child: OutlinedButton.icon(
               onPressed: saving || alert.tracked ? null : onTakeTrade,
               icon: Icon(alert.tracked ? Icons.check_circle_outline : Icons.add_chart, size: 17),
-              label: Text(alert.tracked ? 'Practice trade is being tracked' : 'I took this practice trade'),
+              label: Text(alert.tracked ? 'Practice trade is being tracked' : 'Proceed with demo trade'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: alert.tracked ? AppColors.textMuted : color,
                 side: BorderSide(color: (alert.tracked ? AppColors.border : color).withValues(alpha: 0.45)),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DialogLine extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _DialogLine({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(label, style: GoogleFonts.dmSans(color: AppColors.textMuted)),
+          ),
+          Text(
+            value,
+            style: GoogleFonts.dmSans(color: AppColors.textPrimary, fontWeight: FontWeight.w700),
           ),
         ],
       ),
