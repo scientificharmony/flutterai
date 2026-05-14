@@ -4724,3 +4724,56 @@ Expected result:
 - Entry pushes should be for new opportunities, not duplicates of open positions.
 - Live logs should show whether open positions remain `HOLD`, `HOLD_CAUTION`, `PROTECT_PROFIT`, `TAKE_PROFIT`, or `CUT_LOSS`.
 
+---
+
+## 2026-05-14 — Expand Forex Pair Universe
+
+### User request
+
+User expected forex to produce more frequent opportunities and agreed to expand markets before increasing scan frequency.
+
+### Implementation
+
+Updated:
+
+```text
+trading_backend/services/forex_service.py
+lproject/lib/screens/forex_lab_screen.dart
+trading_backend/tests/test_forex_lab.py
+```
+
+Expanded the default forex scan universe from 7 pairs to 20 liquid major/minor pairs:
+
+```text
+EUR/USD
+GBP/USD
+USD/JPY
+EUR/GBP
+AUD/USD
+USD/CHF
+GBP/JPY
+EUR/JPY
+AUD/JPY
+NZD/USD
+USD/CAD
+EUR/CHF
+EUR/AUD
+GBP/CHF
+GBP/AUD
+CAD/JPY
+CHF/JPY
+AUD/NZD
+EUR/CAD
+GBP/CAD
+```
+
+Kept:
+- Forex entry scan interval at 15 minutes.
+- Forex monitor interval at 5 minutes.
+- Current threshold/cooldown behavior.
+- Duplicate suppression for already-open pair/direction trades.
+
+Rationale:
+- More pairs should create more opportunities without lowering signal quality.
+- Increasing frequency first would likely create more noise and spread-sensitive false positives.
+

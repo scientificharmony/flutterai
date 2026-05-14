@@ -17,6 +17,19 @@ DEFAULT_FOREX_PAIRS = [
     "AUD/USD",
     "USD/CHF",
     "GBP/JPY",
+    "EUR/JPY",
+    "AUD/JPY",
+    "NZD/USD",
+    "USD/CAD",
+    "EUR/CHF",
+    "EUR/AUD",
+    "GBP/CHF",
+    "GBP/AUD",
+    "CAD/JPY",
+    "CHF/JPY",
+    "AUD/NZD",
+    "EUR/CAD",
+    "GBP/CAD",
 ]
 
 
@@ -28,6 +41,19 @@ _MOCK_PRICES = {
     "AUD/USD": 0.6640,
     "USD/CHF": 0.9035,
     "GBP/JPY": 199.35,
+    "EUR/JPY": 169.80,
+    "AUD/JPY": 104.20,
+    "NZD/USD": 0.6120,
+    "USD/CAD": 1.3720,
+    "EUR/CHF": 0.9480,
+    "EUR/AUD": 1.6300,
+    "GBP/CHF": 1.1140,
+    "GBP/AUD": 1.9140,
+    "CAD/JPY": 115.10,
+    "CHF/JPY": 179.00,
+    "AUD/NZD": 1.0860,
+    "EUR/CAD": 1.4860,
+    "GBP/CAD": 1.7440,
 }
 
 IG_DEMO_BASE_URL = "https://demo-api.ig.com/gateway/deal"

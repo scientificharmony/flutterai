@@ -27,6 +27,15 @@ def test_forex_scan_accepts_timeframe_and_pairs(client):
     assert {signal["timeframe"] for signal in body["signals"]} == {"1h"}
 
 
+def test_default_forex_universe_has_expanded_liquid_pairs():
+    from services.forex_service import DEFAULT_FOREX_PAIRS
+
+    assert len(DEFAULT_FOREX_PAIRS) == 20
+    assert "EUR/JPY" in DEFAULT_FOREX_PAIRS
+    assert "USD/CAD" in DEFAULT_FOREX_PAIRS
+    assert "GBP/CAD" in DEFAULT_FOREX_PAIRS
+
+
 def test_forex_summary_uses_ig_snapshot_when_configured(monkeypatch):
     import httpx
     from services import forex_service

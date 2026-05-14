@@ -22,6 +22,19 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
     _ForexPair('AUD/USD', 'Commodity', 'Asia + New York', 'Risk-sensitive commodity pair'),
     _ForexPair('USD/CHF', 'Safe haven', 'London + New York', 'Defensive dollar pair'),
     _ForexPair('GBP/JPY', 'Volatile cross', 'London + Tokyo', 'Fast-moving; practice only'),
+    _ForexPair('EUR/JPY', 'Cross', 'London + Tokyo', 'Euro-yen momentum pair'),
+    _ForexPair('AUD/JPY', 'Risk cross', 'Asia + New York', 'Sensitive to risk appetite'),
+    _ForexPair('NZD/USD', 'Commodity', 'Asia + New York', 'Kiwi dollar trend pair'),
+    _ForexPair('USD/CAD', 'Commodity', 'New York', 'Oil and dollar-sensitive pair'),
+    _ForexPair('EUR/CHF', 'Defensive cross', 'London', 'Lower-volatility European cross'),
+    _ForexPair('EUR/AUD', 'Cross', 'London + Asia', 'Trend and risk rotation pair'),
+    _ForexPair('GBP/CHF', 'Cross', 'London', 'Sterling versus safe-haven franc'),
+    _ForexPair('GBP/AUD', 'Volatile cross', 'London + Asia', 'Wide ranges; practice only'),
+    _ForexPair('CAD/JPY', 'Risk cross', 'Tokyo + New York', 'Oil and risk sentiment pair'),
+    _ForexPair('CHF/JPY', 'Safe-haven cross', 'Tokyo + London', 'Defensive currency rotation'),
+    _ForexPair('AUD/NZD', 'Regional cross', 'Asia', 'Australia/New Zealand relative strength'),
+    _ForexPair('EUR/CAD', 'Cross', 'London + New York', 'Euro versus commodity currency'),
+    _ForexPair('GBP/CAD', 'Cross', 'London + New York', 'Sterling versus commodity currency'),
   ];
 
   int _riskBps = 50;
