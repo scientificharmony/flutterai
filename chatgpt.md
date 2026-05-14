@@ -4453,3 +4453,31 @@ Expected result after deploy:
 - Existing unlinked open practice trades should link if the matching IG demo position is still open.
 - New `I took this practice trade` actions should capture `ig_deal_id` and `ig_size`.
 
+---
+
+## 2026-05-14 — Forex Monitor Log Cleanup
+
+### User request
+
+User noticed the live journal output looked like:
+
+```text
+Forex monito: checking 2 open practice positions.
+```
+
+### Implementation
+
+Updated:
+
+```text
+trading_backend/workers/forex_position_monitor_job.py
+```
+
+Changed the monitor heartbeat log to:
+
+```text
+Forex position monitor: checking N open practice positions.
+```
+
+This makes the log line clearer while watching Level 2 auto-close behavior.
+

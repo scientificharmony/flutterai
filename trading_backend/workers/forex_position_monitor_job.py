@@ -24,7 +24,7 @@ async def run_forex_position_monitoring() -> None:
         if not positions:
             return
 
-        logger.info("Forex monitor: checking %d open practice positions.", len(positions))
+        logger.info("Forex position monitor: checking %d open practice positions.", len(positions))
 
         for pos in positions:
             try:
