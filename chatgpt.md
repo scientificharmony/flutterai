@@ -5155,3 +5155,6 @@ Fix:
 - It infers the pair from the IG epic/instrument name and stores stop/limit/level from IG when available.
 - Response now includes `ig_deal_id` and `ig_size` so the app can show linked details.
 
+Follow-up fix:
+- If a dealId exists in the DB but was marked `closed` by mistake while still open on IG, `/forex/positions` now revives that row back to `open` instead of skipping it.
+

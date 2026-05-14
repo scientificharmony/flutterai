@@ -161,14 +161,46 @@ def _sync_missing_ig_positions(user: User, session: Session) -> None:
     rows = session.exec(
         select(ForexPosition.ig_deal_id)
         .where(ForexPosition.user_id == user.id)
+        .where(ForexPosition.status == "open")
         .where(ForexPosition.ig_deal_id != None)
     ).all()
-    existing_deals = {row for row in rows if row}
+    existing_open_deals = {row for row in rows if row}
 
     changed = False
     for ig in ig_positions:
-        if ig.deal_id in existing_deals:
+        if ig.deal_id in existing_open_deals:
             continue
+
+        existing = session.exec(
+            select(ForexPosition)
+            .where(ForexPosition.user_id == user.id)
+            .where(ForexPosition.ig_deal_id == ig.deal_id)
+            .order_by(ForexPosition.opened_at.desc())
+        ).first()
+        if existing:
+            pair = infer_pair_from_ig_position(ig.epic, ig.instrument_name) or existing.pair
+            direction = "LONG" if ig.direction.upper() == "BUY" else "SHORT"
+            entry = ig.level if ig.level is not None else (get_forex_mid_price(pair) or existing.entry_price)
+            stop = ig.stop_level if ig.stop_level is not None else existing.stop_loss
+            limit = ig.limit_level if ig.limit_level is not None else existing.take_profit
+
+            existing.status = "open"
+            existing.pair = pair
+            existing.direction = direction
+            existing.entry_price = float(entry)
+            existing.stop_loss = float(stop)
+            existing.take_profit = float(limit)
+            existing.close_price = None
+            existing.realised_pnl = None
+            existing.closed_at = None
+            existing.ig_epic = ig.epic
+            existing.ig_size = ig.size
+
+            session.add(existing)
+            existing_open_deals.add(ig.deal_id)
+            changed = True
+            continue
+
         pair = infer_pair_from_ig_position(ig.epic, ig.instrument_name)
         if not pair:
             continue
@@ -192,7 +224,7 @@ def _sync_missing_ig_positions(user: User, session: Session) -> None:
             ig_size=ig.size,
         )
         session.add(pos)
-        existing_deals.add(ig.deal_id)
+        existing_open_deals.add(ig.deal_id)
         changed = True
 
     if changed:
