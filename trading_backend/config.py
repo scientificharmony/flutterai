@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     quiet_hours_start: int = 22
     quiet_hours_end: int = 8
     min_push_action_strength: int = 70
-    scheduled_min_formula_score_for_claude: int = 70
+    scheduled_min_formula_score_for_claude: int = 60
     sell_target_pct: float = 8.0
     stop_loss_pct: float = 5.0
     stale_position_days: int = 14

@@ -291,7 +291,7 @@ def test_formula_score_below_claude_gate_skips_claude(db_engine):
     with patch("workers.scanner_job.engine", db_engine):
         with patch("workers.scanner_job.trading212_service.fetch_balance", new=AsyncMock(return_value=1000.0)), \
              patch("workers.scanner_job.trading212_service.validate_invest_instrument", new=AsyncMock(return_value=(True, "STOCK"))), \
-             patch("workers.scanner_job.scan_watchlist", return_value=[_make_candidate(score=68.0)]), \
+             patch("workers.scanner_job.scan_watchlist", return_value=[_make_candidate(score=58.0)]), \
              patch("workers.scanner_job.claude_service.analyse_candidates", new=AsyncMock(return_value=_make_claude_rec(confidence=80))) as mock_claude, \
              patch("workers.scanner_job.can_call_claude", return_value=(True, "")), \
              patch("workers.scanner_job._is_market_hours", return_value=True), \

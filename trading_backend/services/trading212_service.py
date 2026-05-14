@@ -15,6 +15,41 @@ _instruments_cache: dict[str, dict] = {}
 _instruments_fetched_at: float = 0.0
 _INSTRUMENT_CACHE_TTL = 3600  # 1 hour
 
+# Some user watchlists include "clean" tickers that do not always appear in Trading212's
+# metadata feed as unique aliases (often due to exchange suffixes / share classes).
+# For scanning + notification purposes we allow a small fallback map so these tickers
+# aren't dropped as UNKNOWN. This does not enable order execution.
+_FALLBACK_TICKER_TYPES: dict[str, str] = {
+    # Common ETFs used in our default watchlists.
+    "VWRP": "ETF",
+    "SWDA": "ETF",
+    "VUAG": "ETF",
+    "VUSAL": "ETF",
+    "CSP1": "ETF",
+    "CNDX": "ETF",
+    "IITU": "ETF",
+    "EQQQL": "ETF",
+    "CNX1": "ETF",
+    "EQGB": "ETF",
+    "VHYLL": "ETF",
+    "IGLT": "ETF",
+    "SGLN": "ETF",
+    "ISF": "ETF",
+    "VUKE": "ETF",
+    "VMID": "ETF",
+    "VEUR": "ETF",
+    "MEUD": "ETF",
+    "EIMI": "ETF",
+    "VFEM": "ETF",
+    "HMCH": "ETF",
+    "IJPA": "ETF",
+    "INRGL": "ETF",
+    "XDWH": "ETF",
+    "IUFS": "ETF",
+    "2B76": "ETF",
+    "RBOT": "ETF",
+}
+
 
 def _request_kwargs() -> dict:
     """
@@ -121,8 +156,12 @@ async def validate_invest_instrument(ticker: str) -> tuple[bool, str]:
     Rejects CFD, FOREX, CRYPTO, OPTION, LEVERAGED, SHORT, UNKNOWN.
     """
     await get_instruments()
-    inst = _instruments_cache.get(_normalise_symbol(ticker))
+    norm = _normalise_symbol(ticker)
+    inst = _instruments_cache.get(norm)
     if not inst:
+        fallback = _FALLBACK_TICKER_TYPES.get(norm)
+        if fallback:
+            return True, fallback
         return False, "UNKNOWN"
 
     raw_type = _instrument_type(inst)

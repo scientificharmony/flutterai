@@ -5177,9 +5177,13 @@ Backend `trading_backend/services/cfd_service.py`:
 Backend `trading_backend/config.py` defaults updated:
 - `min_push_action_strength`: `75 -> 70`
 - `max_alerts_per_day`: `5 -> 100`
+ - `scheduled_min_formula_score_for_claude`: `70 -> 60` (so Claude can evaluate borderline setups instead of skipping)
 
 ### What Are "WATCH pushes"?
 The scanner has an internal action `WATCH` for non-actionable results.
 - `WATCH` outcomes are intentionally not persisted and do not trigger push notifications.
 - Only actionable outcomes (for example `BUY_REVIEW`) can become an alert/push, and they are still gated by `min_push_action_strength` and the daily alert limit.
+
+### Trading212 ticker validation note
+Some clean tickers in the default watchlists (e.g. certain ETFs) may not appear as unique symbols in Trading212's instrument metadata feed. For scan/push purposes we allow a small fallback mapping so these are not dropped as `UNKNOWN` validation failures. This does not enable any order execution.
 
