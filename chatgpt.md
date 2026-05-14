@@ -4481,3 +4481,202 @@ Forex position monitor: checking N open practice positions.
 
 This makes the log line clearer while watching Level 2 auto-close behavior.
 
+---
+
+## 2026-05-14 — Session Checkpoint: Push, Forex Level 2, And IG Demo Monitoring
+
+### Push notification recovery
+
+Morning issue:
+- User expected pushes but received none.
+- Linode logs showed Firebase attempted delivery to stale tokens:
+
+```text
+Push send failed for token test-token-1: The registration token is not a valid FCM registration token
+Push send failed ... Requested entity was not found.
+```
+
+Database check showed:
+
+```text
+select count(*) from device_tokens;
+0
+```
+
+Root cause:
+- The app build on the phone did not register a valid FCM device token.
+- Firebase/FCM startup requires the app to be built with:
+
+```text
+--dart-define=ENABLE_FIREBASE=true
+```
+
+Action:
+- Rebuilt and installed the debug APK with Firebase enabled.
+- User confirmed a push was received.
+
+Current state:
+- Device token registration is working again.
+- Forex and invest pushes should both work when their backend gates pass.
+
+### Screen-awake app behavior
+
+Implemented wakelock support so the phone screen stays awake while Hey Jimmy is open.
+
+Files:
+
+```text
+lproject/pubspec.yaml
+lproject/pubspec.lock
+lproject/lib/main.dart
+```
+
+Dependency:
+
+```yaml
+wakelock_plus: ^1.2.8
+```
+
+Startup call:
+
+```dart
+await WakelockPlus.enable();
+```
+
+Built and installed with Firebase still enabled.
+
+### Forex entry notifications
+
+User lowered forex threshold from 78 to 75 and set:
+
+```text
+FOREX_ENTRY_COOLDOWN_HOURS=1
+```
+
+Cooldown decision:
+- Cooldown is not mandatory, but useful to avoid duplicate EUR/USD alerts every 15 minutes.
+- One hour is the current practical setting.
+
+Important fix:
+- Cooldown now only counts delivered forex entry alerts:
+
+```text
+push_sent = true
+```
+
+This prevents failed/no-device pushes from blocking later real notifications.
+
+User later received a forex push with two actionable trades:
+
+```text
+EUR/USD SHORT 80/100
+USD/CHF LONG 77/100
+```
+
+Manual IG interpretation:
+- `LONG` means `BUY`.
+- `SHORT` means `SELL`.
+- User opened USD/CHF LONG and EUR/USD SHORT in IG demo.
+
+### IG demo trade entry notes
+
+For USD/CHF LONG:
+- IG action: `BUY`
+- App stop: `0.77855`
+- App target/limit: `0.78905`
+- User used demo size `0.5`.
+- IG ticket was initially in `pts away` mode, so the stop/limit had to be entered as either levels or converted points.
+
+For EUR/USD SHORT:
+- IG action: `SELL`
+- App stop: around `1.17426`
+- App target/limit: around `1.16376`
+- Demo size guidance: `0.5`.
+
+### Level 2 IG linking
+
+Problem:
+- After tapping `I took this practice trade`, Hey Jimmy had open forex rows but no IG deal link:
+
+```text
+EUR/USD|SHORT|open||||
+USD/CHF|LONG|open|||HOLD_CAUTION|HOLD_CAUTION
+```
+
+Fix:
+- IG open-position matching now handles Mini markets and normalized pair matching.
+- `/forex/positions` attempts to backfill unlinked open Hey Jimmy practice trades from currently open IG demo positions.
+
+After deploy, user confirmed both open trades linked:
+
+```text
+EUR/USD|SHORT|open|DIAAAAXG3A88MAS|0.5|HOLD|
+USD/CHF|LONG|open|DIAAAAXG3A3AUAF|0.5|HOLD|HOLD_CAUTION
+```
+
+Meaning:
+- Hey Jimmy can monitor both positions.
+- `ig_deal_id` and `ig_size` are present.
+- Level 2 auto-close is now technically able to close these IG demo positions when the auto-close rules fire.
+
+### Auto-close status
+
+User confirmed:
+
+```text
+ENABLE_FOREX_AUTO_CLOSE: True
+```
+
+Current behavior:
+- Forex monitor runs every 5 minutes.
+- It sends status-change pushes for important states.
+- Auto-close is demo-only.
+- Linked trades may auto-close when status reaches:
+
+```text
+TAKE_PROFIT
+CUT_LOSS
+```
+
+Statuses such as `HOLD`, `HOLD_CAUTION`, and `PROTECT_PROFIT` do not auto-close.
+
+### Monitor deployment confirmation
+
+The typo/clarity cleanup was deployed.
+
+New live log confirmed:
+
+```text
+Forex position monitor: checking 2 open practice positions.
+```
+
+Current observed state:
+- Monitor sees both open practice positions.
+- No `TAKE_PROFIT` / `CUT_LOSS` yet.
+- No auto-close action yet.
+- No repeated push unless the assistant status changes.
+
+### Useful verification commands
+
+Check open forex rows:
+
+```bash
+cd ~/flutterai/flutterai/trading_backend
+sqlite3 hey_jimmy.db "select pair,direction,status,ig_deal_id,ig_size,last_assistant_status,last_notified_status from forex_positions order by opened_at desc limit 5;"
+```
+
+Watch Level 2 monitor:
+
+```bash
+sudo journalctl -u flutterai-backend.service -f | grep -i "forex position monitor\|auto-close\|TAKE_PROFIT\|CUT_LOSS\|Push"
+```
+
+Check auto-close flag:
+
+```bash
+.venv/bin/python - <<'PY'
+from config import settings
+print("ENABLE_FOREX_AUTO_CLOSE:", settings.ENABLE_FOREX_AUTO_CLOSE)
+PY
+```
+
