@@ -6,6 +6,7 @@ import 'screens/alert_detail_screen.dart';
 import 'screens/forex_entry_alert_review_screen.dart';
 import 'screens/forex_lab_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/notification_debug_screen.dart';
 import 'services/device_service.dart';
 import 'services/fcm_service.dart';
 
@@ -57,6 +58,7 @@ class _AITradingAppState extends State<AITradingApp> {
   }
 
   void _handleNotificationTap(Map<String, dynamic> data) {
+    debugPrint("Notification tap data: $data");
     final nav = _navigatorKey.currentState;
     if (nav == null) {
       // App launched from a tap before the Navigator is ready. Queue and replay after first frame.
@@ -70,13 +72,21 @@ class _AITradingAppState extends State<AITradingApp> {
     }
 
     final alertId = data['alert_id'] as String?;
-    if (alertId == null) return;
+    if (alertId == null) {
+      nav.push(MaterialPageRoute(builder: (_) => NotificationDebugScreen(data: data)));
+      return;
+    }
     if (data['type'] == 'forex_entry_alert') {
       nav.push(
         MaterialPageRoute(
           builder: (_) => ForexEntryAlertReviewScreen(alertId: alertId),
         ),
       );
+      return;
+    }
+    // If we got here, we have an alert_id but no recognized type; show debug.
+    if (data['type'] == null) {
+      nav.push(MaterialPageRoute(builder: (_) => NotificationDebugScreen(data: data)));
       return;
     }
     nav.push(
