@@ -224,8 +224,8 @@ def _atr_stops(df: pd.DataFrame, direction: str, price: float, pair: str) -> tup
         atr14 = 0.0
 
     if atr14 > 0:
-        stop_dist = atr14 * 1.5
-        tp_dist = atr14 * 3.0
+        stop_dist = atr14 * settings.forex_atr_stop_multiplier
+        tp_dist = atr14 * settings.forex_atr_tp_multiplier
     else:
         stop_dist = fallback_stop_pips * pip
         tp_dist = fallback_stop_pips * 2 * pip
@@ -516,6 +516,10 @@ def place_ig_demo_position(
                 )
                 confirm.raise_for_status()
                 confirm_data = confirm.json()
+                deal_status = confirm_data.get("dealStatus", "")
+                if deal_status == "REJECTED":
+                    reason = confirm_data.get("reason") or confirm_data.get("status") or "REJECTED"
+                    raise RuntimeError(f"IG rejected the trade: {reason}")
                 deal_id = confirm_data.get("dealId") or ""
                 break
             except Exception as exc:
