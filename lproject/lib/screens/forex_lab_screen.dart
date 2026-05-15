@@ -241,80 +241,140 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
         TextEditingController(text: alert.stopLoss.toStringAsFixed(5));
     final targetController =
         TextEditingController(text: alert.takeProfit.toStringAsFixed(5));
+    bool usePoints = false;
+
+    double _pipSize(String pair) => pair.contains('JPY') ? 0.01 : 0.0001;
+
+    void _setControllersFromMode() {
+      if (!usePoints) {
+        stopController.text = alert.stopLoss.toStringAsFixed(5);
+        targetController.text = alert.takeProfit.toStringAsFixed(5);
+        return;
+      }
+      final pip = _pipSize(alert.pair);
+      final stopPts = (alert.entryPrice - alert.stopLoss).abs() / pip;
+      final tpPts = (alert.takeProfit - alert.entryPrice).abs() / pip;
+      stopController.text = stopPts.toStringAsFixed(1);
+      targetController.text = tpPts.toStringAsFixed(1);
+    }
 
     return showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('${alert.direction == 'LONG' ? 'BUY' : 'SELL'} ${alert.pair}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _DialogLine(label: 'Strength', value: '${alert.strength}/100'),
-            _DialogLine(label: 'Entry', value: alert.entryPrice.toStringAsFixed(5)),
-            const SizedBox(height: 12),
-            Text('Edit order (sent to IG demo)',
-                style: GoogleFonts.dmSans(
-                    color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 10),
-            TextField(
-              controller: sizeController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Size (contracts)',
-                hintText: '0.5',
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocalState) {
+          return AlertDialog(
+            title: Text('${alert.direction == 'LONG' ? 'BUY' : 'SELL'} ${alert.pair}'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _DialogLine(label: 'Strength', value: '${alert.strength}/100'),
+                _DialogLine(label: 'Entry', value: alert.entryPrice.toStringAsFixed(5)),
+                const SizedBox(height: 12),
+                Text('Edit order (sent to IG demo)',
+                    style: GoogleFonts.dmSans(
+                        color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    ChoiceChip(
+                      label: const Text('Price levels'),
+                      selected: !usePoints,
+                      onSelected: (v) {
+                        if (v) {
+                          setLocalState(() {
+                            usePoints = false;
+                            _setControllersFromMode();
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(width: 10),
+                    ChoiceChip(
+                      label: const Text('Pts away'),
+                      selected: usePoints,
+                      onSelected: (v) {
+                        if (v) {
+                          setLocalState(() {
+                            usePoints = true;
+                            _setControllersFromMode();
+                          });
+                        }
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: sizeController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Size (contracts)',
+                    hintText: '0.5',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: stopController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                    labelText: usePoints ? 'Stop (pts away)' : 'Stop loss (price)',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: targetController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                    labelText: usePoints ? 'Target (pts away)' : 'Take profit (price)',
+                  ),
+                ),
+                _DialogLine(label: 'Planned risk', value: '£${alert.riskAmount.toStringAsFixed(0)}'),
+                const SizedBox(height: 10),
+                Text(
+                  'Demo only. Hey Jimmy will place this in IG demo and start tracking it.',
+                  style: GoogleFonts.dmSans(color: AppColors.textMuted, fontSize: 12),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
               ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: stopController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Stop loss (price)',
+              FilledButton(
+                onPressed: () {
+                  final size = double.tryParse(sizeController.text.trim());
+                  final stopRaw = double.tryParse(stopController.text.trim());
+                  final tpRaw = double.tryParse(targetController.text.trim());
+                  if (size == null || stopRaw == null || tpRaw == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Enter valid numbers for size/stop/target.')),
+                    );
+                    return;
+                  }
+
+                  final pip = _pipSize(alert.pair);
+                  final isLong = alert.direction == 'LONG';
+                  final stop = usePoints
+                      ? (isLong ? alert.entryPrice - (stopRaw * pip) : alert.entryPrice + (stopRaw * pip))
+                      : stopRaw;
+                  final tp = usePoints
+                      ? (isLong ? alert.entryPrice + (tpRaw * pip) : alert.entryPrice - (tpRaw * pip))
+                      : tpRaw;
+
+                  Navigator.of(context).pop({
+                    'size': size,
+                    'stop_loss': stop,
+                    'take_profit': tp,
+                  });
+                },
+                style: FilledButton.styleFrom(backgroundColor: color),
+                child: const Text('Proceed with demo trade'),
               ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: targetController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Take profit (price)',
-              ),
-            ),
-            _DialogLine(label: 'Planned risk', value: '£${alert.riskAmount.toStringAsFixed(0)}'),
-            const SizedBox(height: 10),
-            Text(
-              'Demo only. Hey Jimmy will place this in IG demo and start tracking it.',
-              style: GoogleFonts.dmSans(color: AppColors.textMuted, fontSize: 12),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final size = double.tryParse(sizeController.text.trim());
-              final stop = double.tryParse(stopController.text.trim());
-              final tp = double.tryParse(targetController.text.trim());
-              if (size == null || stop == null || tp == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Enter valid numbers for size/stop/target.')),
-                );
-                return;
-              }
-              Navigator.of(context).pop({
-                'size': size,
-                'stop_loss': stop,
-                'take_profit': tp,
-              });
-            },
-            style: FilledButton.styleFrom(backgroundColor: color),
-            child: const Text('Proceed with demo trade'),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
