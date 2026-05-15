@@ -22,11 +22,12 @@ router = APIRouter(prefix="/forex", tags=["forex"])
 def debug_ig_balance():
     """Temporary diagnostic — shows raw IG live balance fetch result."""
     import httpx
-    from services.forex_service import _get_ig_session, _ig_base_url, _ig_headers
+    from services.forex_service import _get_ig_session, _ig_base_url, _ig_headers, get_ig_live_balance, risk_amount
     try:
         session = _get_ig_session()
         resp = httpx.get(f"{_ig_base_url()}/accounts", headers=_ig_headers(session=session), timeout=8.0)
-        return {"status": resp.status_code, "body": resp.json()}
+        live = get_ig_live_balance()
+        return {"status": resp.status_code, "body": resp.json(), "get_ig_live_balance_result": live, "risk_amount": risk_amount()}
     except Exception as exc:
         return {"error": str(exc)}
 
