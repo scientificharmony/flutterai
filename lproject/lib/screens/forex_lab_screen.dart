@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -75,6 +76,7 @@ class _ForexLabScreenState extends State<ForexLabScreen> with RouteAware {
   bool _savingTrade = false;
   String? _shownInitialEntryAlertId;
   String? _error;
+  Timer? _autoRefreshTimer;
 
   double get _balance => _summary?.demoBalance ?? 5000;
   double get _riskAmount => _summary?.riskAmount ?? (_balance * (_riskBps / 10000));
@@ -83,6 +85,7 @@ class _ForexLabScreenState extends State<ForexLabScreen> with RouteAware {
   void initState() {
     super.initState();
     _loadSummary();
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) => _loadSummary());
   }
 
   @override
@@ -94,6 +97,7 @@ class _ForexLabScreenState extends State<ForexLabScreen> with RouteAware {
   @override
   void dispose() {
     routeObserver.unsubscribe(this);
+    _autoRefreshTimer?.cancel();
     super.dispose();
   }
 
@@ -506,7 +510,10 @@ class _ForexLabScreenState extends State<ForexLabScreen> with RouteAware {
           ),
         ],
       ),
-      body: ListView(
+      body: RefreshIndicator(
+        onRefresh: _loadSummary,
+        color: AppColors.cyan,
+        child: ListView(
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 28),
         children: [
           _StatusPanel(
@@ -577,6 +584,7 @@ class _ForexLabScreenState extends State<ForexLabScreen> with RouteAware {
                 child: _PairTile(pair: pair),
               )),
         ],
+      ),
       ),
     );
   }

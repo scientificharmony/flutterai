@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -17,11 +18,19 @@ class _CfdLabScreenState extends State<CfdLabScreen> {
   CfdSummary? _summary;
   bool _loading = true;
   String? _error;
+  Timer? _autoRefreshTimer;
 
   @override
   void initState() {
     super.initState();
     _loadSummary();
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) => _loadSummary());
+  }
+
+  @override
+  void dispose() {
+    _autoRefreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadSummary() async {
