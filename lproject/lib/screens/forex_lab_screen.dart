@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
+import '../main.dart' show routeObserver;
 import '../services/device_service.dart';
 import '../theme/app_theme.dart';
 
@@ -15,7 +17,7 @@ class ForexLabScreen extends StatefulWidget {
   State<ForexLabScreen> createState() => _ForexLabScreenState();
 }
 
-class _ForexLabScreenState extends State<ForexLabScreen> {
+class _ForexLabScreenState extends State<ForexLabScreen> with RouteAware {
   static const _pairs = [
     _ForexPair('EUR/USD', 'Major', 'London + New York', 'Tight spread, high liquidity'),
     _ForexPair('GBP/USD', 'Major', 'London + New York', 'More volatile than EUR/USD'),
@@ -37,6 +39,31 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
     _ForexPair('AUD/NZD', 'Regional cross', 'Asia', 'Australia/New Zealand relative strength'),
     _ForexPair('EUR/CAD', 'Cross', 'London + New York', 'Euro versus commodity currency'),
     _ForexPair('GBP/CAD', 'Cross', 'London + New York', 'Sterling versus commodity currency'),
+    _ForexPair('NZD/JPY', 'Risk cross', 'Asia + Tokyo', 'Kiwi-yen risk sentiment pair'),
+    _ForexPair('NZD/CAD', 'Cross', 'Asia + New York', 'Kiwi versus commodity currency'),
+    _ForexPair('NZD/CHF', 'Cross', 'Asia + London', 'Kiwi versus safe-haven franc'),
+    _ForexPair('AUD/CAD', 'Commodity cross', 'Asia + New York', 'Dual commodity currency pair'),
+    _ForexPair('AUD/CHF', 'Cross', 'Asia + London', 'Aussie versus safe-haven franc'),
+    _ForexPair('GBP/NZD', 'Volatile cross', 'London + Asia', 'Wide-ranging sterling cross'),
+    _ForexPair('EUR/NZD', 'Cross', 'London + Asia', 'Euro versus kiwi dollar'),
+    _ForexPair('USD/SGD', 'Asian major', 'Asia', 'Dollar versus Singapore dollar'),
+    _ForexPair('USD/NOK', 'Scandinavian', 'London + New York', 'Dollar versus Norwegian krone'),
+    _ForexPair('USD/SEK', 'Scandinavian', 'London + New York', 'Dollar versus Swedish krona'),
+    _ForexPair('USD/MXN', 'Emerging market', 'New York', 'Dollar versus Mexican peso'),
+    _ForexPair('USD/ZAR', 'Emerging market', 'London + New York', 'Dollar versus South African rand'),
+    _ForexPair('USD/TRY', 'Emerging market', 'London + New York', 'Dollar versus Turkish lira'),
+    _ForexPair('USD/PLN', 'Eastern European', 'London + New York', 'Dollar versus Polish zloty'),
+    _ForexPair('USD/HUF', 'Eastern European', 'London + New York', 'Dollar versus Hungarian forint'),
+    _ForexPair('USD/CZK', 'Eastern European', 'London + New York', 'Dollar versus Czech koruna'),
+    _ForexPair('USD/DKK', 'Scandinavian', 'London + New York', 'Dollar versus Danish krone'),
+    _ForexPair('USD/HKD', 'Asian major', 'Asia', 'Dollar versus Hong Kong dollar'),
+    _ForexPair('USD/CNH', 'Asian major', 'Asia', 'Dollar versus offshore Chinese yuan'),
+    _ForexPair('EUR/PLN', 'Eastern European', 'London', 'Euro versus Polish zloty'),
+    _ForexPair('EUR/HUF', 'Eastern European', 'London', 'Euro versus Hungarian forint'),
+    _ForexPair('EUR/CZK', 'Eastern European', 'London', 'Euro versus Czech koruna'),
+    _ForexPair('EUR/SEK', 'Scandinavian', 'London', 'Euro versus Swedish krona'),
+    _ForexPair('EUR/NOK', 'Scandinavian', 'London', 'Euro versus Norwegian krone'),
+    _ForexPair('EUR/DKK', 'Scandinavian', 'London', 'Euro versus Danish krone'),
   ];
 
   int _riskBps = 50;
@@ -49,6 +76,7 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
   bool _savingTrade = false;
   String? _shownInitialEntryAlertId;
   String? _error;
+  Timer? _autoRefreshTimer;
 
   double get _balance => _summary?.demoBalance ?? 5000;
   double get _riskAmount => _summary?.riskAmount ?? (_balance * (_riskBps / 10000));
@@ -56,6 +84,26 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
   @override
   void initState() {
     super.initState();
+    _loadSummary();
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) => _loadSummary());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    routeObserver.subscribe(this, ModalRoute.of(context)!);
+  }
+
+  @override
+  void dispose() {
+    routeObserver.unsubscribe(this);
+    _autoRefreshTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    // A screen on top of this one was popped (e.g. review screen after execute).
     _loadSummary();
   }
 
@@ -462,7 +510,10 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
           ),
         ],
       ),
-      body: ListView(
+      body: RefreshIndicator(
+        onRefresh: _loadSummary,
+        color: AppColors.cyan,
+        child: ListView(
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 28),
         children: [
           _StatusPanel(
@@ -533,6 +584,7 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
                 child: _PairTile(pair: pair),
               )),
         ],
+      ),
       ),
     );
   }

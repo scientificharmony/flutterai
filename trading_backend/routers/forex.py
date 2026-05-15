@@ -11,11 +11,20 @@ from database import get_session
 from models.db_models import ForexEntryAlert, ForexPosition, User
 from models.schemas import ForexEntryAlertResponse, ForexScanRequest, ForexSummaryResponse
 from routers.forex_positions import ForexPositionResponse, _to_response
-from services.forex_service import find_matching_ig_position, get_forex_mid_price, get_forex_summary, place_ig_demo_position
+from services.forex_service import find_matching_ig_position, get_forex_mid_price, get_forex_summary, get_ig_live_balance, place_ig_demo_position
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/forex", tags=["forex"])
+
+
+@router.post("/admin/trigger-entry-scanner")
+async def trigger_entry_scanner():
+    """Manually trigger the forex entry scanner job for diagnostics."""
+    from workers.forex_entry_scanner_job import run_forex_entry_scanner
+    await run_forex_entry_scanner()
+    return {"status": "triggered"}
+
 
 class ForexExecuteCustomBody(BaseModel):
     size: float = Field(..., gt=0, le=50)

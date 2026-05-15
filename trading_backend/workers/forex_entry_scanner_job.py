@@ -31,10 +31,9 @@ async def run_forex_entry_scanner() -> None:
             logger.info("Forex entry scanner: no actionable signals.")
             return
 
-        top = actionable[0]
         logger.info(
-            "Forex entry scanner: top=%s %s strength=%s provider=%s",
-            top.pair, top.direction, top.strength, summary.provider,
+            "Forex entry scanner: %d actionable signals | top=%s %s strength=%s provider=%s",
+            len(actionable), actionable[0].pair, actionable[0].direction, actionable[0].strength, summary.provider,
         )
 
         for user in users:
@@ -42,7 +41,8 @@ async def run_forex_entry_scanner() -> None:
                 session.add(user)
                 session.commit()
                 session.refresh(user)
-            _maybe_alert_user(user, top, session)
+            for signal in actionable:
+                _maybe_alert_user(user, signal, session)
 
 
 def _recent_entry_alert(user_id: str, pair: str, direction: str, session: Session) -> bool:

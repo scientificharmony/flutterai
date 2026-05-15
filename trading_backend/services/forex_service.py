@@ -33,6 +33,31 @@ DEFAULT_FOREX_PAIRS = [
     "AUD/NZD",
     "EUR/CAD",
     "GBP/CAD",
+    "NZD/JPY",
+    "NZD/CAD",
+    "NZD/CHF",
+    "AUD/CAD",
+    "AUD/CHF",
+    "GBP/NZD",
+    "EUR/NZD",
+    "USD/SGD",
+    "USD/NOK",
+    "USD/SEK",
+    "USD/MXN",
+    "USD/ZAR",
+    "USD/TRY",
+    "USD/PLN",
+    "USD/HUF",
+    "USD/CZK",
+    "USD/DKK",
+    "USD/HKD",
+    "USD/CNH",
+    "EUR/PLN",
+    "EUR/HUF",
+    "EUR/CZK",
+    "EUR/SEK",
+    "EUR/NOK",
+    "EUR/DKK",
 ]
 
 
@@ -107,6 +132,42 @@ class IgPlacedPosition:
 _ig_session: IgSession | None = None
 _epic_cache: dict[str, str] = {}
 _snapshot_cache: dict[str, tuple[ForexMarketSnapshot, float]] = {}
+
+# Live IG balance cache — refreshed every 60 seconds
+_ig_balance_cache: tuple[float, float] | None = None  # (balance, monotonic_ts)
+_IG_BALANCE_CACHE_TTL = 60.0
+
+
+def get_ig_live_balance() -> float:
+    """Fetch available funds from IG account. Falls back to env var on failure."""
+    global _ig_balance_cache
+    now = monotonic()
+    if _ig_balance_cache is not None and (now - _ig_balance_cache[1]) < _IG_BALANCE_CACHE_TTL:
+        return _ig_balance_cache[0]
+    try:
+        session = _get_ig_session()
+        resp = httpx.get(
+            f"{_ig_base_url()}/accounts",
+            headers=_ig_headers(session=session),
+            timeout=8.0,
+        )
+        resp.raise_for_status()
+        accounts = resp.json().get("accounts", [])
+        # Use the preferred account first, then fall back to first account.
+        # IG accountType is CFD/SPREADBET/PHYSICAL — not DEMO/LIVE — so we
+        # match on preferred flag rather than type.
+        ordered = sorted(accounts, key=lambda a: (0 if a.get("preferred") else 1))
+        for acc in ordered:
+            bal = acc.get("balance", {})
+            # Use total funds (balance) not available — available fluctuates with open margin
+            value = float(bal.get("balance") or bal.get("available") or 0)
+            if value > 0:
+                logger.info("IG live balance: £%.2f (account: %s)", value, acc.get("accountId", "?"))
+                _ig_balance_cache = (value, now)
+                return value
+    except Exception as exc:
+        logger.warning("IG live balance fetch failed, using env var fallback: %s", exc)
+    return settings.FOREX_DEMO_BALANCE
 _SNAPSHOT_CACHE_SECONDS = 60.0
 
 
@@ -116,8 +177,9 @@ def provider_connected() -> bool:
     return bool(settings.IG_API_KEY and settings.IG_USERNAME and settings.IG_PASSWORD)
 
 
-def risk_amount() -> float:
-    return round(settings.FOREX_DEMO_BALANCE * (settings.FOREX_RISK_BPS / 10000), 2)
+def risk_amount(balance: float | None = None) -> float:
+    bal = balance if balance is not None else get_ig_live_balance()
+    return round(bal * (settings.FOREX_RISK_BPS / 10000), 2)
 
 
 def _pip_size(pair: str) -> float:
@@ -224,8 +286,8 @@ def _atr_stops(df: pd.DataFrame, direction: str, price: float, pair: str) -> tup
         atr14 = 0.0
 
     if atr14 > 0:
-        stop_dist = atr14 * 1.5
-        tp_dist = atr14 * 3.0
+        stop_dist = atr14 * settings.forex_atr_stop_multiplier
+        tp_dist = atr14 * settings.forex_atr_tp_multiplier
     else:
         stop_dist = fallback_stop_pips * pip
         tp_dist = fallback_stop_pips * 2 * pip
@@ -516,6 +578,10 @@ def place_ig_demo_position(
                 )
                 confirm.raise_for_status()
                 confirm_data = confirm.json()
+                deal_status = confirm_data.get("dealStatus", "")
+                if deal_status == "REJECTED":
+                    reason = confirm_data.get("reason") or confirm_data.get("status") or "REJECTED"
+                    raise RuntimeError(f"IG rejected the trade: {reason}")
                 deal_id = confirm_data.get("dealId") or ""
                 break
             except Exception as exc:
@@ -602,7 +668,7 @@ def _market_snapshots(pairs: list[str]) -> list[ForexMarketSnapshot]:
     return snapshots
 
 
-def build_signal(snapshot: ForexMarketSnapshot, timeframe: str) -> ForexSignalResponse:
+def build_signal(snapshot: ForexMarketSnapshot, timeframe: str, balance: float | None = None) -> ForexSignalResponse:
     pair = snapshot.pair
     price = snapshot.price
     pip = _pip_size(pair)
@@ -627,7 +693,7 @@ def build_signal(snapshot: ForexMarketSnapshot, timeframe: str) -> ForexSignalRe
         take_profit = price
 
     stop_dist = abs(price - stop_loss)
-    risk = risk_amount()
+    risk = risk_amount(balance)
     position_units = 0 if direction == "NO_TRADE" or stop_dist == 0 else int(max(1, risk / stop_dist))
 
     return ForexSignalResponse(
@@ -658,16 +724,17 @@ def build_signal(snapshot: ForexMarketSnapshot, timeframe: str) -> ForexSignalRe
 
 def get_forex_summary(timeframe: str = "15m", pairs: list[str] | None = None) -> ForexSummaryResponse:
     selected_pairs = pairs or DEFAULT_FOREX_PAIRS
+    balance = get_ig_live_balance()
     snapshots = _market_snapshots(selected_pairs)
-    signals = [build_signal(snapshot, timeframe) for snapshot in snapshots]
+    signals = [build_signal(snapshot, timeframe, balance) for snapshot in snapshots]
     signals.sort(key=lambda signal: signal.strength, reverse=True)
     return ForexSummaryResponse(
         provider=settings.FOREX_PROVIDER,
         connected=provider_connected(),
         account_type=settings.IG_ACCOUNT_TYPE if settings.FOREX_PROVIDER.lower() == "ig" else "MOCK",
-        demo_balance=settings.FOREX_DEMO_BALANCE,
+        demo_balance=balance,
         risk_bps=settings.FOREX_RISK_BPS,
-        risk_amount=risk_amount(),
+        risk_amount=risk_amount(balance),
         min_signal_strength=settings.FOREX_MIN_SIGNAL_STRENGTH,
         pairs=selected_pairs,
         signals=signals,

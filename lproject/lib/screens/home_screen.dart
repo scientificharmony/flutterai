@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -27,11 +28,19 @@ class _HomeScreenState extends State<HomeScreen> {
   List<TradeAlert> _alerts = [];
   bool _loading = true;
   String? _error;
+  Timer? _autoRefreshTimer;
 
   @override
   void initState() {
     super.initState();
     _loadAlerts();
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) => _loadAlerts());
+  }
+
+  @override
+  void dispose() {
+    _autoRefreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadAlerts() async {
