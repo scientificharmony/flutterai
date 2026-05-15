@@ -286,6 +286,26 @@ DB:
 
 Scheduler:
 - New job: `cfd_entry_scanner` runs every `CFD_ENTRY_SCAN_MINUTES` minutes.
+
+---
+
+## Local Dev (Windows) Notes
+
+Flutter SDK path on this machine:
+- `D:\DEV\flutter\bin` (contains `flutter.bat`)
+
+Android device deploy (USB debugging):
+```powershell
+cd "D:\DEV\Hey Jimmy\lproject"
+adb devices
+flutter devices
+flutter run -d RFCY11HPMGW
+```
+
+If `flutter` isn't recognized in the current terminal session, run by absolute path:
+```powershell
+& "D:\DEV\flutter\bin\flutter.bat" run -d RFCY11HPMGW
+```
         env_file = ".env"
 
 
