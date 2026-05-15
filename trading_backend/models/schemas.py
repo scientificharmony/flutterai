@@ -305,3 +305,20 @@ class CfdSummaryResponse(BaseModel):
 class CfdScanRequest(BaseModel):
     timeframe: str = "15m"
     markets: list[str] = Field(default_factory=list)
+
+
+class CfdEntryAlertResponse(BaseModel):
+    id: str
+    market: str
+    epic: str
+    direction: Literal["LONG", "SHORT"]
+    strength: int = Field(ge=0, le=100)
+    timeframe: str
+    entry_price: float
+    stop_loss: float
+    take_profit: float
+    risk_amount: float
+    contract_size: float
+    rationale: str
+    push_sent: bool
+    created_at: datetime

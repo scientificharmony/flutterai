@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     forex_min_signal_strength: int = 78
     enable_forex_auto_close: bool = False
     enable_forex_entry_alerts: bool = True
+    enable_cfd_entry_alerts: bool = True
+    cfd_min_signal_strength: int = 75
+    cfd_entry_scan_minutes: int = 15
+    cfd_entry_cooldown_hours: int = 4
     forex_entry_scan_minutes: int = 15
     forex_entry_cooldown_hours: int = 4
     forex_ig_demo_size: float = 0.5
@@ -129,9 +133,17 @@ class Settings(BaseSettings):
     @property
     def ENABLE_FOREX_ENTRY_ALERTS(self) -> bool: return self.enable_forex_entry_alerts
     @property
+    def ENABLE_CFD_ENTRY_ALERTS(self) -> bool: return self.enable_cfd_entry_alerts
+    @property
     def FOREX_ENTRY_SCAN_MINUTES(self) -> int: return self.forex_entry_scan_minutes
     @property
     def FOREX_ENTRY_COOLDOWN_HOURS(self) -> int: return self.forex_entry_cooldown_hours
+    @property
+    def CFD_MIN_SIGNAL_STRENGTH(self) -> int: return self.cfd_min_signal_strength
+    @property
+    def CFD_ENTRY_SCAN_MINUTES(self) -> int: return self.cfd_entry_scan_minutes
+    @property
+    def CFD_ENTRY_COOLDOWN_HOURS(self) -> int: return self.cfd_entry_cooldown_hours
     @property
     def FOREX_IG_DEMO_SIZE(self) -> float: return self.forex_ig_demo_size
     @property

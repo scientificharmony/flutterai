@@ -265,3 +265,23 @@ class ForexEntryAlert(SQLModel, table=True):
     rationale: str = Field(default="")
     push_sent: bool = Field(default=False)
     created_at: datetime = Field(default_factory=_utcnow)
+
+
+class CfdEntryAlert(SQLModel, table=True):
+    __tablename__ = "cfd_entry_alerts"
+
+    id: str = Field(default_factory=_uid, primary_key=True)
+    user_id: str = Field(foreign_key="users.id", index=True)
+    market: str = Field(index=True)  # e.g. "FTSE 100"
+    epic: str = Field(index=True)
+    direction: str  # LONG | SHORT
+    strength: int
+    timeframe: str = Field(default="15m")
+    entry_price: float
+    stop_loss: float
+    take_profit: float
+    risk_amount: float
+    contract_size: float = Field(default=1.0)
+    rationale: str = Field(default="")
+    push_sent: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=_utcnow)

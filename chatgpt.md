@@ -258,6 +258,34 @@ class Settings(BaseSettings):
     max_alerts_per_day: int = 5
 
     class Config:
+
+---
+
+## CFD Lab Entry Alerts (Push Scanner)
+
+Added an automated CFD entry scanner that periodically checks IG CFD markets and sends push notifications when an actionable setup appears.
+
+Key behavior:
+- Runs on a schedule (in-process APScheduler).
+- Only alerts for `direction in {LONG, SHORT}` and `strength >= CFD_MIN_SIGNAL_STRENGTH`.
+- Requires a resolved `epic` (skips signals without an epic).
+- Enforces a per-(market,direction) cooldown window before sending another push.
+- Stores pushed alerts in SQLite so the app can fetch recent CFD entry alerts.
+
+Config/env:
+- `ENABLE_CFD_ENTRY_ALERTS` (default true)
+- `CFD_MIN_SIGNAL_STRENGTH` (default 75)
+- `CFD_ENTRY_SCAN_MINUTES` (default 15)
+- `CFD_ENTRY_COOLDOWN_HOURS` (default 4)
+
+API:
+- `GET /cfd/entry-alerts?limit=10` → recent pushed CFD entry alerts.
+
+DB:
+- New table: `cfd_entry_alerts`
+
+Scheduler:
+- New job: `cfd_entry_scanner` runs every `CFD_ENTRY_SCAN_MINUTES` minutes.
         env_file = ".env"
 
 

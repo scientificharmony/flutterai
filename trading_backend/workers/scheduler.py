@@ -20,6 +20,7 @@ from workers.pie_monitor_job import run_pie_monitoring
 from workers.holding_tracker_job import run_holding_tracker
 from workers.forex_position_monitor_job import run_forex_position_monitoring
 from workers.forex_entry_scanner_job import run_forex_entry_scanner
+from workers.cfd_entry_scanner_job import run_cfd_entry_scanner
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,13 @@ def _run_forex_entry_scanner() -> None:
         logger.error("Forex entry scanner failed: %s", exc)
 
 
+def _run_cfd_entry_scanner() -> None:
+    try:
+        asyncio.run(run_cfd_entry_scanner())
+    except Exception as exc:
+        logger.error("CFD entry scanner failed: %s", exc)
+
+
 def start_scheduler() -> None:
     scheduler.add_job(
         _run_all_strategies,
@@ -114,11 +122,19 @@ def start_scheduler() -> None:
         replace_existing=True,
         max_instances=1,
     )
+    scheduler.add_job(
+        _run_cfd_entry_scanner,
+        trigger=IntervalTrigger(minutes=settings.CFD_ENTRY_SCAN_MINUTES),
+        id="cfd_entry_scanner",
+        replace_existing=True,
+        max_instances=1,
+    )
     scheduler.start()
     logger.info(
         "Scheduler started (market_scan=15m, outcome_check=1h, pie_monitor=4h, "
-        "holding_tracker=30m, forex_monitor=5m, forex_entry=%sm).",
+        "holding_tracker=30m, forex_monitor=5m, forex_entry=%sm, cfd_entry=%sm).",
         settings.FOREX_ENTRY_SCAN_MINUTES,
+        settings.CFD_ENTRY_SCAN_MINUTES,
     )
 
 
