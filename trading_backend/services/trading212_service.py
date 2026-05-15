@@ -187,7 +187,8 @@ def get_instrument_name(ticker: str) -> str:
 def get_t212_ticker(ticker: str) -> str | None:
     """Return the canonical T212 ticker (e.g. 'AAPL_US_EQ') for a normalised ticker."""
     inst = _instruments_cache.get(_normalise_symbol(ticker))
-    return inst.get("ticker") if inst else None
+    value = inst.get("ticker") if inst else None
+    return value.upper() if isinstance(value, str) and value else None
 
 
 async def create_pie(
