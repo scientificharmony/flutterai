@@ -43,6 +43,21 @@ DEFAULT_FOREX_PAIRS = [
     "USD/SGD",
     "USD/NOK",
     "USD/SEK",
+    "USD/MXN",
+    "USD/ZAR",
+    "USD/TRY",
+    "USD/PLN",
+    "USD/HUF",
+    "USD/CZK",
+    "USD/DKK",
+    "USD/HKD",
+    "USD/CNH",
+    "EUR/PLN",
+    "EUR/HUF",
+    "EUR/CZK",
+    "EUR/SEK",
+    "EUR/NOK",
+    "EUR/DKK",
 ]
 
 

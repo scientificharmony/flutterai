@@ -48,6 +48,21 @@ class _ForexLabScreenState extends State<ForexLabScreen> with RouteAware {
     _ForexPair('USD/SGD', 'Asian major', 'Asia', 'Dollar versus Singapore dollar'),
     _ForexPair('USD/NOK', 'Scandinavian', 'London + New York', 'Dollar versus Norwegian krone'),
     _ForexPair('USD/SEK', 'Scandinavian', 'London + New York', 'Dollar versus Swedish krona'),
+    _ForexPair('USD/MXN', 'Emerging market', 'New York', 'Dollar versus Mexican peso'),
+    _ForexPair('USD/ZAR', 'Emerging market', 'London + New York', 'Dollar versus South African rand'),
+    _ForexPair('USD/TRY', 'Emerging market', 'London + New York', 'Dollar versus Turkish lira'),
+    _ForexPair('USD/PLN', 'Eastern European', 'London + New York', 'Dollar versus Polish zloty'),
+    _ForexPair('USD/HUF', 'Eastern European', 'London + New York', 'Dollar versus Hungarian forint'),
+    _ForexPair('USD/CZK', 'Eastern European', 'London + New York', 'Dollar versus Czech koruna'),
+    _ForexPair('USD/DKK', 'Scandinavian', 'London + New York', 'Dollar versus Danish krone'),
+    _ForexPair('USD/HKD', 'Asian major', 'Asia', 'Dollar versus Hong Kong dollar'),
+    _ForexPair('USD/CNH', 'Asian major', 'Asia', 'Dollar versus offshore Chinese yuan'),
+    _ForexPair('EUR/PLN', 'Eastern European', 'London', 'Euro versus Polish zloty'),
+    _ForexPair('EUR/HUF', 'Eastern European', 'London', 'Euro versus Hungarian forint'),
+    _ForexPair('EUR/CZK', 'Eastern European', 'London', 'Euro versus Czech koruna'),
+    _ForexPair('EUR/SEK', 'Scandinavian', 'London', 'Euro versus Swedish krona'),
+    _ForexPair('EUR/NOK', 'Scandinavian', 'London', 'Euro versus Norwegian krone'),
+    _ForexPair('EUR/DKK', 'Scandinavian', 'London', 'Euro versus Danish krone'),
   ];
 
   int _riskBps = 50;
