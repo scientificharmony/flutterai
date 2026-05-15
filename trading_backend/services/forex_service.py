@@ -59,6 +59,8 @@ DEFAULT_FOREX_PAIRS = [
     "EUR/SEK",
     "EUR/NOK",
     "EUR/DKK",
+    "XAU/USD",
+    "XAG/USD",
 ]
 
 
@@ -83,6 +85,8 @@ _MOCK_PRICES = {
     "AUD/NZD": 1.0860,
     "EUR/CAD": 1.4860,
     "GBP/CAD": 1.7440,
+    "XAU/USD": 3300.0,
+    "XAG/USD": 33.0,
 }
 
 IG_DEMO_BASE_URL = "https://demo-api.ig.com/gateway/deal"
@@ -184,6 +188,10 @@ def risk_amount(balance: float | None = None) -> float:
 
 
 def _pip_size(pair: str) -> float:
+    if pair == "XAU/USD":
+        return 0.1
+    if pair == "XAG/USD":
+        return 0.01
     return 0.01 if pair.endswith("/JPY") else 0.0001
 
 
@@ -193,7 +201,9 @@ _SESSION_PAIRS: dict[str, list[str]] = {
     # London session: 07:00–16:00 UTC
     "london": ["EUR/USD", "GBP/USD", "EUR/GBP", "USD/CHF", "EUR/CHF", "GBP/CHF", "EUR/AUD", "GBP/AUD", "EUR/CAD", "GBP/CAD", "GBP/NZD", "EUR/NZD", "EUR/JPY", "GBP/JPY", "CHF/JPY", "CAD/JPY", "USD/NOK", "USD/SEK", "USD/DKK", "EUR/PLN", "EUR/HUF", "EUR/CZK", "EUR/SEK", "EUR/NOK", "EUR/DKK", "USD/PLN", "USD/HUF", "USD/CZK"],
     # New York session: 13:00–22:00 UTC
-    "new_york": ["EUR/USD", "GBP/USD", "USD/JPY", "USD/CAD", "USD/CHF", "AUD/USD", "NZD/USD", "USD/MXN", "USD/ZAR", "USD/TRY"],
+    "new_york": ["EUR/USD", "GBP/USD", "USD/JPY", "USD/CAD", "USD/CHF", "AUD/USD", "NZD/USD", "USD/MXN", "USD/ZAR", "USD/TRY", "XAU/USD", "XAG/USD"],
+    # London + NY overlap (also active in London): commodities
+    "london_commodity": ["XAU/USD", "XAG/USD"],
 }
 
 
@@ -205,6 +215,7 @@ def _session_bonus(pair: str) -> int:
         active_sessions.append("asia")
     if 7 <= hour < 16:
         active_sessions.append("london")
+        active_sessions.append("london_commodity")
     if 13 <= hour < 22:
         active_sessions.append("new_york")
 
