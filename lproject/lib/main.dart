@@ -39,6 +39,7 @@ class AITradingApp extends StatefulWidget {
 
 class _AITradingAppState extends State<AITradingApp> {
   final _navigatorKey = GlobalKey<NavigatorState>();
+  Map<String, dynamic>? _pendingNotificationTap;
 
   @override
   void initState() {
@@ -50,23 +51,39 @@ class _AITradingAppState extends State<AITradingApp> {
 
   void _initFcm() {
     FcmService.instance.onNotificationTap = (data) {
-      final alertId = data['alert_id'] as String?;
-      if (alertId == null) return;
-      if (data['type'] == 'forex_entry_alert') {
-        _navigatorKey.currentState?.push(
-          MaterialPageRoute(
-            builder: (_) => ForexEntryAlertReviewScreen(alertId: alertId),
-          ),
-        );
-        return;
-      }
-      _navigatorKey.currentState?.push(
-        MaterialPageRoute(
-          builder: (_) => AlertDetailScreen(alertId: alertId),
-        ),
-      );
+      _handleNotificationTap(data);
     };
     FcmService.instance.init();
+  }
+
+  void _handleNotificationTap(Map<String, dynamic> data) {
+    final nav = _navigatorKey.currentState;
+    if (nav == null) {
+      // App launched from a tap before the Navigator is ready. Queue and replay after first frame.
+      _pendingNotificationTap = data;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final pending = _pendingNotificationTap;
+        _pendingNotificationTap = null;
+        if (pending != null) _handleNotificationTap(pending);
+      });
+      return;
+    }
+
+    final alertId = data['alert_id'] as String?;
+    if (alertId == null) return;
+    if (data['type'] == 'forex_entry_alert') {
+      nav.push(
+        MaterialPageRoute(
+          builder: (_) => ForexEntryAlertReviewScreen(alertId: alertId),
+        ),
+      );
+      return;
+    }
+    nav.push(
+      MaterialPageRoute(
+        builder: (_) => AlertDetailScreen(alertId: alertId),
+      ),
+    );
   }
 
   @override

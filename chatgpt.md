@@ -325,6 +325,7 @@ Goal: faster forex execution flow off a push notification.
 Implementation:
 - Push payload includes `type=forex_entry_alert` and `alert_id`.
 - App routes notification taps to a dedicated review screen (not the lab list).
+- Note: app may receive initial notification tap before Navigator is ready (cold start). We queue the tap payload and replay it after the first frame so navigation is reliable in release builds.
 - Screen shows the recommended setup and provides:
   - `Execute (IG Demo)` (calls `POST /forex/entry-alerts/{id}/execute-demo-custom` with default size=0.5)
   - `Decline` (calls `POST /forex/entry-alerts/{id}/decline`)
