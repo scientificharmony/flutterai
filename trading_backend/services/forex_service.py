@@ -153,19 +153,18 @@ def get_ig_live_balance() -> float:
         )
         resp.raise_for_status()
         accounts = resp.json().get("accounts", [])
-        # Prefer the account matching our configured account type
-        for acc in accounts:
-            if acc.get("accountType", "").upper() == settings.IG_ACCOUNT_TYPE.upper():
-                balance = float(acc.get("balance", {}).get("available", 0))
-                if balance > 0:
-                    _ig_balance_cache = (balance, now)
-                    return balance
-        # Fallback: use first account
-        if accounts:
-            balance = float(accounts[0].get("balance", {}).get("available", 0))
-            if balance > 0:
-                _ig_balance_cache = (balance, now)
-                return balance
+        # Use the preferred account first, then fall back to first account.
+        # IG accountType is CFD/SPREADBET/PHYSICAL — not DEMO/LIVE — so we
+        # match on preferred flag rather than type.
+        ordered = sorted(accounts, key=lambda a: (0 if a.get("preferred") else 1))
+        for acc in ordered:
+            bal = acc.get("balance", {})
+            # Use total funds (balance) not available — available fluctuates with open margin
+            value = float(bal.get("balance") or bal.get("available") or 0)
+            if value > 0:
+                logger.info("IG live balance: £%.2f (account: %s)", value, acc.get("accountId", "?"))
+                _ig_balance_cache = (value, now)
+                return value
     except Exception as exc:
         logger.warning("IG live balance fetch failed, using env var fallback: %s", exc)
     return settings.FOREX_DEMO_BALANCE
