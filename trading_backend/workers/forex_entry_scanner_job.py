@@ -12,8 +12,24 @@ from services.notification_service import send_to_user_devices
 logger = logging.getLogger(__name__)
 
 
+def _forex_market_open() -> bool:
+    """Forex is closed from Friday 22:00 UTC to Sunday 22:00 UTC."""
+    now = datetime.now(timezone.utc)
+    weekday = now.weekday()  # 0=Mon, 4=Fri, 5=Sat, 6=Sun
+    if weekday == 5:
+        return False
+    if weekday == 4 and now.hour >= 22:
+        return False
+    if weekday == 6 and now.hour < 22:
+        return False
+    return True
+
+
 async def run_forex_entry_scanner() -> None:
     if not settings.ENABLE_FOREX_ENTRY_ALERTS:
+        return
+    if not _forex_market_open():
+        logger.info("Forex entry scanner: market closed, skipping.")
         return
 
     with Session(engine) as session:

@@ -554,6 +554,8 @@ class _ForexLabScreenState extends State<ForexLabScreen> with RouteAware {
                 )),
           ],
           const SizedBox(height: 12),
+          _ClosedForexPositions(positions: _positions),
+          const SizedBox(height: 12),
           Text('Practice signals',
               style: GoogleFonts.orbitron(
                   color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
@@ -1400,6 +1402,112 @@ class _ModeBadge extends StatelessWidget {
   }
 }
 
+class _ClosedForexPositions extends StatelessWidget {
+  final List<ForexPosition> positions;
+
+  const _ClosedForexPositions({required this.positions});
+
+  @override
+  Widget build(BuildContext context) {
+    final closed = positions.where((p) => p.status == 'closed').toList();
+    if (closed.isEmpty) return const SizedBox.shrink();
+
+    final totalPnl = closed.fold<double>(0, (sum, p) => sum + (p.realisedPnl ?? 0));
+    final wins = closed.where((p) => (p.realisedPnl ?? 0) > 0).length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text('Closed trades',
+                  style: GoogleFonts.orbitron(
+                      color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
+            ),
+            Text(
+              '${closed.length} trades · ${wins}W/${closed.length - wins}L · £${totalPnl.toStringAsFixed(2)}',
+              style: GoogleFonts.dmSans(
+                  color: totalPnl >= 0 ? AppColors.green : AppColors.pink,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        ...closed.map((pos) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _ClosedPositionTile(position: pos),
+            )),
+      ],
+    );
+  }
+}
+
+class _ClosedPositionTile extends StatelessWidget {
+  final ForexPosition position;
+
+  const _ClosedPositionTile({required this.position});
+
+  @override
+  Widget build(BuildContext context) {
+    final pnl = position.realisedPnl ?? 0;
+    final isWin = pnl > 0;
+    final pnlColor = isWin ? AppColors.green : pnl < 0 ? AppColors.pink : AppColors.textMuted;
+    final dirColor = position.direction == 'LONG' ? AppColors.green : AppColors.pink;
+
+    String _fmt(DateTime? dt) {
+      if (dt == null) return '-';
+      return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: pnlColor.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(position.pair,
+                        style: GoogleFonts.orbitron(
+                            color: AppColors.textPrimary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700)),
+                    const SizedBox(width: 6),
+                    _ModeBadge(label: position.direction, color: dirColor),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Entry ${position.entryPrice.toStringAsFixed(5)}  →  Close ${position.closePrice?.toStringAsFixed(5) ?? '-'}',
+                  style: GoogleFonts.dmSans(color: AppColors.textMuted, fontSize: 11),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _fmt(position.closedAt),
+                  style: GoogleFonts.dmSans(color: AppColors.textMuted.withValues(alpha: 0.6), fontSize: 10),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            '£${pnl.toStringAsFixed(2)}',
+            style: GoogleFonts.dmSans(color: pnlColor, fontWeight: FontWeight.w800, fontSize: 15),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ForexPair {
   final String symbol;
   final String kind;
@@ -1550,6 +1658,10 @@ class ForexPosition {
   final bool igLinked;
   final String? igDealId;
   final double? igSize;
+  final double? closePrice;
+  final double? realisedPnl;
+  final DateTime? openedAt;
+  final DateTime? closedAt;
 
   const ForexPosition({
     required this.id,
@@ -1570,6 +1682,10 @@ class ForexPosition {
     required this.igLinked,
     required this.igDealId,
     required this.igSize,
+    required this.closePrice,
+    required this.realisedPnl,
+    required this.openedAt,
+    required this.closedAt,
   });
 
   factory ForexPosition.fromJson(Map<String, dynamic> json) => ForexPosition(
@@ -1591,5 +1707,9 @@ class ForexPosition {
         igLinked: json['ig_linked'] as bool? ?? false,
         igDealId: json['ig_deal_id'] as String?,
         igSize: (json['ig_size'] as num?)?.toDouble(),
+        closePrice: (json['close_price'] as num?)?.toDouble(),
+        realisedPnl: (json['realised_pnl'] as num?)?.toDouble(),
+        openedAt: json['opened_at'] != null ? DateTime.tryParse(json['opened_at'] as String) : null,
+        closedAt: json['closed_at'] != null ? DateTime.tryParse(json['closed_at'] as String) : null,
       );
 }
