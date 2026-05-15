@@ -22,6 +22,7 @@ class _ForexEntryAlertReviewScreenState extends State<ForexEntryAlertReviewScree
   bool _loading = true;
   bool _busy = false;
   String? _error;
+  String? _executionError;
 
   @override
   void initState() {
@@ -97,6 +98,7 @@ class _ForexEntryAlertReviewScreenState extends State<ForexEntryAlertReviewScree
       );
       if (!mounted) return;
       if (res.statusCode == 200) {
+        setState(() => _executionError = null);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${_alert!.pair} demo trade placed and tracked.')),
         );
@@ -107,10 +109,12 @@ class _ForexEntryAlertReviewScreenState extends State<ForexEntryAlertReviewScree
           final decoded = jsonDecode(res.body) as Map<String, dynamic>;
           message = decoded['detail'] as String? ?? message;
         } catch (_) {}
+        setState(() => _executionError = message);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
       }
     } catch (_) {
       if (!mounted) return;
+      setState(() => _executionError = 'Forex backend unavailable.');
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Forex backend unavailable.')));
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -141,6 +145,7 @@ class _ForexEntryAlertReviewScreenState extends State<ForexEntryAlertReviewScree
                 : _AlertBody(
                     alert: _alert!,
                     busy: _busy,
+                    executionError: _executionError,
                     onExecute: _execute,
                     onDecline: _decline,
                   ),
@@ -152,6 +157,7 @@ class _ForexEntryAlertReviewScreenState extends State<ForexEntryAlertReviewScree
 class _AlertBody extends StatelessWidget {
   final ForexEntryAlert alert;
   final bool busy;
+  final String? executionError;
   final VoidCallback onExecute;
   final VoidCallback onDecline;
 
@@ -160,6 +166,7 @@ class _AlertBody extends StatelessWidget {
     required this.busy,
     required this.onExecute,
     required this.onDecline,
+    this.executionError,
   });
 
   @override
@@ -194,6 +201,19 @@ class _AlertBody extends StatelessWidget {
         const SizedBox(height: 14),
         if (alert.declined)
           Text('Declined', style: GoogleFonts.dmSans(color: AppColors.textMuted)),
+        if (executionError != null) ...[
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.pink.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(executionError!,
+                style: GoogleFonts.dmSans(color: AppColors.pink, fontSize: 13)),
+          ),
+        ],
         const Spacer(),
         Row(
           children: [

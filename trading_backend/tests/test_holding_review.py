@@ -12,9 +12,10 @@ def test_review_sell_fails_if_not_owned(client):
         headers=_headers(),
     )
     assert res.status_code == 200
-    d = res.json()["alert"]
-    assert d["action"] == "DO_NOT_ACT"
-    assert d["trading212_review_enabled"] is False
+    d = res.json()
+    assert d["status"] == "no_action"
+    assert d.get("alert") is None
+    assert d["safety_flags"][0] == "Not owned: review disabled."
 
 
 def test_review_sell_succeeds_for_owned_weak_ticker(client):

@@ -1,3 +1,6 @@
+from datetime import datetime, timezone
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
@@ -9,6 +12,8 @@ from models.db_models import ForexEntryAlert, ForexPosition, User
 from models.schemas import ForexEntryAlertResponse, ForexScanRequest, ForexSummaryResponse
 from routers.forex_positions import ForexPositionResponse, _to_response
 from services.forex_service import find_matching_ig_position, get_forex_mid_price, get_forex_summary, place_ig_demo_position
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/forex", tags=["forex"])
 
@@ -207,16 +212,24 @@ def execute_forex_entry_alert_demo_custom(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
+    logger.info("FOREX EXECUTE START | user=%s | alert=%s", user.id, alert_id)
+
     if settings.IG_ACCOUNT_TYPE.upper() != "DEMO":
         raise HTTPException(status_code=403, detail="Forex execution is only enabled for IG DEMO accounts.")
     if settings.FOREX_PROVIDER.lower() != "ig":
         raise HTTPException(status_code=422, detail="IG forex provider is not configured.")
+
+    logger.info("FOREX EXECUTE | provider=%s | account_type=%s | ig_user=%s",
+                 settings.FOREX_PROVIDER, settings.IG_ACCOUNT_TYPE, settings.IG_USERNAME)
 
     alert = session.get(ForexEntryAlert, alert_id)
     if not alert or alert.user_id != user.id or not alert.push_sent:
         raise HTTPException(status_code=404, detail="Forex entry alert not found.")
     if alert.direction not in {"LONG", "SHORT"}:
         raise HTTPException(status_code=422, detail="Only LONG or SHORT alerts can be executed.")
+
+    logger.info("FOREX EXECUTE | pair=%s | direction=%s | entry=%.5f | stop=%.5f | tp=%.5f",
+                 alert.pair, alert.direction, alert.entry_price, alert.stop_loss, alert.take_profit)
 
     if body.stop_loss == body.take_profit:
         raise HTTPException(status_code=422, detail="Stop and target cannot be the same.")
@@ -231,25 +244,44 @@ def execute_forex_entry_alert_demo_custom(
         )
     ).first()
     if existing:
+        logger.info("FOREX EXECUTE | reusing existing open position | pos=%s", existing.id)
         return _to_response(existing, get_forex_mid_price(existing.pair))
 
     current_price = get_forex_mid_price(alert.pair)
     if current_price is None:
+        logger.warning("FOREX EXECUTE | current IG price unavailable for %s", alert.pair)
         raise HTTPException(status_code=422, detail="Current IG price is unavailable.")
+
+    logger.info("FOREX EXECUTE | current_price=%.5f | alert_entry=%.5f", current_price, alert.entry_price)
+
     max_slippage = settings.FOREX_EXECUTION_MAX_SLIPPAGE_PIPS * _pip_size(alert.pair)
     if abs(current_price - alert.entry_price) > max_slippage:
+        logger.warning("FOREX EXECUTE | slippage exceeded | delta=%.5f | max=%.5f",
+                       abs(current_price - alert.entry_price), max_slippage)
         raise HTTPException(
             status_code=409,
             detail="Market moved too far from the alert entry. Refresh and wait for a new setup.",
         )
 
-    placed = place_ig_demo_position(
-        pair=alert.pair,
-        direction=alert.direction,
-        size=body.size,
-        stop_level=body.stop_loss,
-        limit_level=body.take_profit,
-    )
+    try:
+        placed = place_ig_demo_position(
+            pair=alert.pair,
+            direction=alert.direction,
+            size=body.size,
+            stop_level=body.stop_loss,
+            limit_level=body.take_profit,
+        )
+    except Exception as exc:
+        logger.error("FOREX EXECUTE | IG placement failed | pair=%s | direction=%s | error=%s",
+                     alert.pair, alert.direction, exc)
+        raise HTTPException(
+            status_code=422,
+            detail=f"IG demo trade placement failed: {exc}",
+        )
+
+    logger.info("FOREX EXECUTE | IG placed | deal_id=%s | deal_ref=%s | epic=%s | size=%s",
+                 placed.deal_id, placed.deal_reference, placed.epic, placed.size)
+
     deal_id = placed.deal_id
     if not deal_id:
         try:
@@ -258,6 +290,7 @@ def execute_forex_entry_alert_demo_custom(
             matched = None
         if matched:
             deal_id = matched.deal_id
+            logger.info("FOREX EXECUTE | deal_id resolved via position match | deal_id=%s", deal_id)
 
     pos = ForexPosition(
         user_id=user.id,
@@ -276,6 +309,8 @@ def execute_forex_entry_alert_demo_custom(
     session.add(pos)
     session.commit()
     session.refresh(pos)
+
+    logger.info("FOREX EXECUTE COMPLETE | pos=%s | ig_deal_id=%s", pos.id, deal_id or placed.deal_reference)
     return _to_response(pos, get_forex_mid_price(pos.pair))
 
 
