@@ -10,6 +10,8 @@ import 'screens/notification_debug_screen.dart';
 import 'services/device_service.dart';
 import 'services/fcm_service.dart';
 
+final RouteObserver<ModalRoute<void>> routeObserver = RouteObserver<ModalRoute<void>>();
+
 class AppStartupConfig {
   static const bool enableFirebase = bool.fromEnvironment(
     'ENABLE_FIREBASE',
@@ -103,6 +105,7 @@ class _AITradingAppState extends State<AITradingApp> {
       title: 'Hey Jimmy',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
+      navigatorObservers: [routeObserver],
       home: const HomeScreen(),
     );
   }

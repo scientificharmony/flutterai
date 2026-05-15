@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
+import '../main.dart' show routeObserver;
 import '../services/device_service.dart';
 import '../theme/app_theme.dart';
 
@@ -15,7 +16,7 @@ class ForexLabScreen extends StatefulWidget {
   State<ForexLabScreen> createState() => _ForexLabScreenState();
 }
 
-class _ForexLabScreenState extends State<ForexLabScreen> {
+class _ForexLabScreenState extends State<ForexLabScreen> with RouteAware {
   static const _pairs = [
     _ForexPair('EUR/USD', 'Major', 'London + New York', 'Tight spread, high liquidity'),
     _ForexPair('GBP/USD', 'Major', 'London + New York', 'More volatile than EUR/USD'),
@@ -56,6 +57,24 @@ class _ForexLabScreenState extends State<ForexLabScreen> {
   @override
   void initState() {
     super.initState();
+    _loadSummary();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    routeObserver.subscribe(this, ModalRoute.of(context)!);
+  }
+
+  @override
+  void dispose() {
+    routeObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    // A screen on top of this one was popped (e.g. review screen after execute).
     _loadSummary();
   }
 
