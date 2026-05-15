@@ -306,6 +306,15 @@ If `flutter` isn't recognized in the current terminal session, run by absolute p
 ```powershell
 & "D:\DEV\flutter\bin\flutter.bat" run -d RFCY11HPMGW
 ```
+
+---
+
+## Forex: IG-Originated Trades
+
+If you open a forex position directly in IG (not via Hey Jimmy), the backend will import/link it on `GET /forex/positions`.
+
+Implementation note:
+- For IG-originated positions, Hey Jimmy backfills `risk_amount` from config (`FOREX_RISK_BPS` / `FOREX_DEMO_BALANCE`) and derives `position_units` from the stop distance so PnL can be calculated in-app.
         env_file = ".env"
 
 

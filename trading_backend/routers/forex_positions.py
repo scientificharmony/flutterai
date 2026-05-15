@@ -14,6 +14,7 @@ from services.forex_service import (
     get_ig_open_positions,
     infer_pair_from_ig_position,
     provider_connected,
+    risk_amount as configured_risk_amount,
 )
 
 router = APIRouter(prefix="/forex/positions", tags=["forex"])
@@ -196,6 +197,12 @@ def _sync_missing_ig_positions(user: User, session: Session) -> None:
             existing.closed_at = None
             existing.ig_epic = ig.epic
             existing.ig_size = ig.size
+            # Backfill sizing for IG-originated deals so PnL/risk isn't null/zero.
+            if existing.risk_amount <= 0:
+                existing.risk_amount = configured_risk_amount()
+            if existing.position_units <= 0:
+                stop_dist = abs(existing.entry_price - existing.stop_loss)
+                existing.position_units = int(existing.risk_amount / stop_dist) if stop_dist > 0 else 0
 
             session.add(existing)
             existing_open_deals.add(ig.deal_id)
@@ -216,8 +223,8 @@ def _sync_missing_ig_positions(user: User, session: Session) -> None:
             entry_price=float(entry),
             stop_loss=float(stop),
             take_profit=float(limit),
-            risk_amount=0.0,
-            position_units=0,
+            risk_amount=configured_risk_amount(),
+            position_units=int(configured_risk_amount() / abs(float(entry) - float(stop))) if float(entry) != float(stop) else 0,
             timeframe="15m",
             status="open",
             ig_deal_id=ig.deal_id,
