@@ -5190,6 +5190,8 @@ The scheduled market scanner (`market_scan`) is configured on a 15 minute interv
 ### Forex auto-close sync note
 If a forex position is linked to IG (`ig_deal_id` present) but the IG deal is no longer open (for example because IG already closed it), the forex position monitor will now automatically mark the Hey Jimmy position as `closed` to keep the app in sync.
 
+In addition, `GET /forex/positions` now performs the same reconciliation so the app updates immediately on refresh (no need to wait for the 5-minute monitor tick).
+
 Auto-close bugfix:
 - IG auto-close requests require the close direction to be the opposite of the original IG direction (BUY/SELL).
 - Our positions store the original signal direction (LONG/SHORT), so we now map:

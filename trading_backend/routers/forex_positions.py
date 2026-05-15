@@ -13,6 +13,7 @@ from services.forex_service import (
     get_forex_mid_price,
     get_ig_open_positions,
     infer_pair_from_ig_position,
+    provider_connected,
 )
 
 router = APIRouter(prefix="/forex/positions", tags=["forex"])
@@ -231,12 +232,59 @@ def _sync_missing_ig_positions(user: User, session: Session) -> None:
         session.commit()
 
 
+def _sync_closed_ig_positions(user: User, session: Session) -> None:
+    """
+    IG is source of truth for whether an IG-linked deal is still open.
+
+    If a position is marked open in Hey Jimmy but IG no longer reports that dealId
+    as open, mark it closed immediately so the app converges without waiting for
+    the 5-minute monitor tick.
+    """
+    if not provider_connected():
+        return
+
+    try:
+        open_ids = {p.deal_id for p in get_ig_open_positions()}
+    except Exception:
+        # Treat IG connectivity issues as non-fatal for the positions endpoint.
+        return
+
+    changed = False
+    now = datetime.now(timezone.utc)
+    positions = session.exec(
+        select(ForexPosition).where(
+            ForexPosition.user_id == user.id,
+            ForexPosition.status == "open",
+            ForexPosition.ig_deal_id != None,  # noqa: E711
+        )
+    ).all()
+    for pos in positions:
+        if not pos.ig_deal_id:
+            continue
+        if pos.ig_deal_id in open_ids:
+            continue
+        close_price = get_forex_mid_price(pos.pair)
+        realised_pnl, _ = _calculate_pnl(pos, close_price) if close_price is not None else (None, None)
+        pos.status = "closed"
+        pos.close_price = close_price
+        pos.realised_pnl = realised_pnl
+        pos.closed_at = now
+        pos.last_assistant_status = "CLOSED"
+        pos.last_notified_status = "CLOSED"
+        session.add(pos)
+        changed = True
+
+    if changed:
+        session.commit()
+
+
 @router.get("", response_model=list[ForexPositionResponse])
 def list_forex_positions(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
     _sync_missing_ig_positions(user, session)
+    _sync_closed_ig_positions(user, session)
     positions = session.exec(
         select(ForexPosition)
         .where(ForexPosition.user_id == user.id)
