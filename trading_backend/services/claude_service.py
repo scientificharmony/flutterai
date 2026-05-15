@@ -88,6 +88,24 @@ def _clean_texts(values: list[str]) -> list[str]:
     return [v for v in values if not _contains_forbidden(v)]
 
 
+def _sanitise_what_is_this(ticker: str, what_is_this: str, valid_tickers: set[str]) -> str:
+    """
+    Claude sometimes explains the right ticker but mentions another candidate ticker in the
+    "what_is_this" sentence. That confuses users, so we strip it when it references a
+    different candidate ticker.
+    """
+    if not what_is_this:
+        return ""
+    t = ticker.upper()
+    upper = what_is_this.upper()
+    for other in valid_tickers:
+        if other == t:
+            continue
+        if re.search(rf"\b{re.escape(other)}\b", upper):
+            return ""
+    return what_is_this
+
+
 def _strip_fences(text: str) -> str:
     if text.startswith("```"):
         parts = text.split("```")
@@ -155,6 +173,7 @@ async def analyse_candidates(
     what_is_this = rec.what_is_this
     if _contains_forbidden(what_is_this):
         what_is_this = ""
+    what_is_this = _sanitise_what_is_this(rec.ticker, what_is_this, valid_tickers)
 
     return rec.model_copy(
         update={
