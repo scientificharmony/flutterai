@@ -132,6 +132,43 @@ class IgPlacedPosition:
 _ig_session: IgSession | None = None
 _epic_cache: dict[str, str] = {}
 _snapshot_cache: dict[str, tuple[ForexMarketSnapshot, float]] = {}
+
+# Live IG balance cache — refreshed every 60 seconds
+_ig_balance_cache: tuple[float, float] | None = None  # (balance, monotonic_ts)
+_IG_BALANCE_CACHE_TTL = 60.0
+
+
+def get_ig_live_balance() -> float:
+    """Fetch available funds from IG account. Falls back to env var on failure."""
+    global _ig_balance_cache
+    now = monotonic()
+    if _ig_balance_cache is not None and (now - _ig_balance_cache[1]) < _IG_BALANCE_CACHE_TTL:
+        return _ig_balance_cache[0]
+    try:
+        session = _get_ig_session()
+        resp = httpx.get(
+            f"{_ig_base_url()}/accounts",
+            headers=_ig_headers(session=session),
+            timeout=8.0,
+        )
+        resp.raise_for_status()
+        accounts = resp.json().get("accounts", [])
+        # Prefer the account matching our configured account type
+        for acc in accounts:
+            if acc.get("accountType", "").upper() == settings.IG_ACCOUNT_TYPE.upper():
+                balance = float(acc.get("balance", {}).get("available", 0))
+                if balance > 0:
+                    _ig_balance_cache = (balance, now)
+                    return balance
+        # Fallback: use first account
+        if accounts:
+            balance = float(accounts[0].get("balance", {}).get("available", 0))
+            if balance > 0:
+                _ig_balance_cache = (balance, now)
+                return balance
+    except Exception as exc:
+        logger.warning("IG live balance fetch failed, using env var fallback: %s", exc)
+    return settings.FOREX_DEMO_BALANCE
 _SNAPSHOT_CACHE_SECONDS = 60.0
 
 
@@ -142,7 +179,7 @@ def provider_connected() -> bool:
 
 
 def risk_amount() -> float:
-    return round(settings.FOREX_DEMO_BALANCE * (settings.FOREX_RISK_BPS / 10000), 2)
+    return round(get_ig_live_balance() * (settings.FOREX_RISK_BPS / 10000), 2)
 
 
 def _pip_size(pair: str) -> float:
@@ -694,7 +731,7 @@ def get_forex_summary(timeframe: str = "15m", pairs: list[str] | None = None) ->
         provider=settings.FOREX_PROVIDER,
         connected=provider_connected(),
         account_type=settings.IG_ACCOUNT_TYPE if settings.FOREX_PROVIDER.lower() == "ig" else "MOCK",
-        demo_balance=settings.FOREX_DEMO_BALANCE,
+        demo_balance=get_ig_live_balance(),
         risk_bps=settings.FOREX_RISK_BPS,
         risk_amount=risk_amount(),
         min_signal_strength=settings.FOREX_MIN_SIGNAL_STRENGTH,
