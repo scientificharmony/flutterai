@@ -177,8 +177,9 @@ def provider_connected() -> bool:
     return bool(settings.IG_API_KEY and settings.IG_USERNAME and settings.IG_PASSWORD)
 
 
-def risk_amount() -> float:
-    return round(get_ig_live_balance() * (settings.FOREX_RISK_BPS / 10000), 2)
+def risk_amount(balance: float | None = None) -> float:
+    bal = balance if balance is not None else get_ig_live_balance()
+    return round(bal * (settings.FOREX_RISK_BPS / 10000), 2)
 
 
 def _pip_size(pair: str) -> float:
@@ -667,7 +668,7 @@ def _market_snapshots(pairs: list[str]) -> list[ForexMarketSnapshot]:
     return snapshots
 
 
-def build_signal(snapshot: ForexMarketSnapshot, timeframe: str) -> ForexSignalResponse:
+def build_signal(snapshot: ForexMarketSnapshot, timeframe: str, balance: float | None = None) -> ForexSignalResponse:
     pair = snapshot.pair
     price = snapshot.price
     pip = _pip_size(pair)
@@ -692,7 +693,7 @@ def build_signal(snapshot: ForexMarketSnapshot, timeframe: str) -> ForexSignalRe
         take_profit = price
 
     stop_dist = abs(price - stop_loss)
-    risk = risk_amount()
+    risk = risk_amount(balance)
     position_units = 0 if direction == "NO_TRADE" or stop_dist == 0 else int(max(1, risk / stop_dist))
 
     return ForexSignalResponse(
@@ -723,16 +724,17 @@ def build_signal(snapshot: ForexMarketSnapshot, timeframe: str) -> ForexSignalRe
 
 def get_forex_summary(timeframe: str = "15m", pairs: list[str] | None = None) -> ForexSummaryResponse:
     selected_pairs = pairs or DEFAULT_FOREX_PAIRS
+    balance = get_ig_live_balance()
     snapshots = _market_snapshots(selected_pairs)
-    signals = [build_signal(snapshot, timeframe) for snapshot in snapshots]
+    signals = [build_signal(snapshot, timeframe, balance) for snapshot in snapshots]
     signals.sort(key=lambda signal: signal.strength, reverse=True)
     return ForexSummaryResponse(
         provider=settings.FOREX_PROVIDER,
         connected=provider_connected(),
         account_type=settings.IG_ACCOUNT_TYPE if settings.FOREX_PROVIDER.lower() == "ig" else "MOCK",
-        demo_balance=get_ig_live_balance(),
+        demo_balance=balance,
         risk_bps=settings.FOREX_RISK_BPS,
-        risk_amount=risk_amount(),
+        risk_amount=risk_amount(balance),
         min_signal_strength=settings.FOREX_MIN_SIGNAL_STRENGTH,
         pairs=selected_pairs,
         signals=signals,
