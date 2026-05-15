@@ -50,6 +50,13 @@ _FALLBACK_TICKER_TYPES: dict[str, str] = {
     "RBOT": "ETF",
 }
 
+# Best-effort deep-link tickers. When Trading212's metadata feed doesn't provide a unique
+# alias mapping (or cache hasn't been warmed yet), we can still generate a useful deep link.
+# This is advisory UI data only; it does not enable any order execution.
+_FALLBACK_T212_TICKERS: dict[str, str] = {
+    t: f"{t}_EQ" for t in _FALLBACK_TICKER_TYPES.keys()
+}
+
 
 def _request_kwargs() -> dict:
     """
@@ -186,9 +193,12 @@ def get_instrument_name(ticker: str) -> str:
 
 def get_t212_ticker(ticker: str) -> str | None:
     """Return the canonical T212 ticker (e.g. 'AAPL_US_EQ') for a normalised ticker."""
-    inst = _instruments_cache.get(_normalise_symbol(ticker))
+    norm = _normalise_symbol(ticker)
+    inst = _instruments_cache.get(norm)
     value = inst.get("ticker") if inst else None
-    return value.upper() if isinstance(value, str) and value else None
+    if isinstance(value, str) and value:
+        return value.upper()
+    return _FALLBACK_T212_TICKERS.get(norm)
 
 
 async def create_pie(

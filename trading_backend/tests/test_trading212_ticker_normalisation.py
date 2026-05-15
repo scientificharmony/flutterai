@@ -9,3 +9,8 @@ def test_get_t212_ticker_normalises_to_uppercase():
     }
     assert get_t212_ticker("VHYLL") == "VHYLL_EQ"
 
+
+def test_get_t212_ticker_falls_back_when_cache_empty():
+    from services import trading212_service
+    trading212_service._instruments_cache = {}
+    assert get_t212_ticker("VHYLL") == "VHYLL_EQ"
