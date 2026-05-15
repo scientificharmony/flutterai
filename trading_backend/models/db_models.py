@@ -264,6 +264,8 @@ class ForexEntryAlert(SQLModel, table=True):
     position_units: int = Field(default=0)
     rationale: str = Field(default="")
     push_sent: bool = Field(default=False)
+    declined: bool = Field(default=False)
+    declined_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=_utcnow)
 
 

@@ -52,7 +52,8 @@ def _recent_entry_alert(user_id: str, pair: str, direction: str, session: Sessio
             ForexEntryAlert.user_id == user_id,
             ForexEntryAlert.pair == pair,
             ForexEntryAlert.direction == direction,
-            ForexEntryAlert.push_sent == True,
+            # Treat declined alerts as part of cooldown to prevent repeated spam.
+            ((ForexEntryAlert.push_sent == True) | (ForexEntryAlert.declined == True)),
             ForexEntryAlert.created_at >= cutoff,
         )
     ).first()

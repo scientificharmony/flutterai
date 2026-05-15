@@ -23,6 +23,8 @@ def _run_migrations() -> None:
     _add_column_if_missing("forex_positions", "ig_epic", "TEXT")
     _add_column_if_missing("forex_positions", "ig_size", "REAL")
     _create_forex_entry_alerts_if_missing()
+    _add_column_if_missing("forex_entry_alerts", "declined", "BOOLEAN NOT NULL DEFAULT 0")
+    _add_column_if_missing("forex_entry_alerts", "declined_at", "DATETIME")
     _create_cfd_entry_alerts_if_missing()
 
 

@@ -66,10 +66,64 @@ def forex_entry_alerts(
             rationale=alert.rationale,
             push_sent=alert.push_sent,
             tracked=(alert.pair, alert.direction) in tracked_pairs,
+            declined=alert.declined,
             created_at=alert.created_at,
         )
         for alert in alerts
     ]
+
+
+@router.get("/entry-alerts/{alert_id}", response_model=ForexEntryAlertResponse)
+def get_forex_entry_alert(
+    alert_id: str,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    alert = session.get(ForexEntryAlert, alert_id)
+    if not alert or alert.user_id != user.id or not alert.push_sent:
+        raise HTTPException(status_code=404, detail="Forex entry alert not found.")
+    tracked = session.exec(
+        select(ForexPosition)
+        .where(
+            ForexPosition.user_id == user.id,
+            ForexPosition.pair == alert.pair,
+            ForexPosition.direction == alert.direction,
+            ForexPosition.status == "open",
+        )
+    ).first() is not None
+    return ForexEntryAlertResponse(
+        id=alert.id,
+        pair=alert.pair,
+        direction=alert.direction,
+        strength=alert.strength,
+        timeframe=alert.timeframe,
+        entry_price=alert.entry_price,
+        stop_loss=alert.stop_loss,
+        take_profit=alert.take_profit,
+        risk_amount=alert.risk_amount,
+        position_units=alert.position_units,
+        rationale=alert.rationale,
+        push_sent=alert.push_sent,
+        tracked=tracked,
+        declined=alert.declined,
+        created_at=alert.created_at,
+    )
+
+
+@router.post("/entry-alerts/{alert_id}/decline")
+def decline_forex_entry_alert(
+    alert_id: str,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    alert = session.get(ForexEntryAlert, alert_id)
+    if not alert or alert.user_id != user.id or not alert.push_sent:
+        raise HTTPException(status_code=404, detail="Forex entry alert not found.")
+    alert.declined = True
+    alert.declined_at = datetime.now(timezone.utc)
+    session.add(alert)
+    session.commit()
+    return {"status": "ok"}
 
 
 @router.post("/entry-alerts/{alert_id}/execute-demo", response_model=ForexPositionResponse)

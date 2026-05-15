@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'theme/app_theme.dart';
 import 'screens/alert_detail_screen.dart';
+import 'screens/forex_entry_alert_review_screen.dart';
 import 'screens/forex_lab_screen.dart';
 import 'screens/home_screen.dart';
 import 'services/device_service.dart';
@@ -54,7 +55,7 @@ class _AITradingAppState extends State<AITradingApp> {
       if (data['type'] == 'forex_entry_alert') {
         _navigatorKey.currentState?.push(
           MaterialPageRoute(
-            builder: (_) => ForexLabScreen(initialEntryAlertId: alertId),
+            builder: (_) => ForexEntryAlertReviewScreen(alertId: alertId),
           ),
         );
         return;

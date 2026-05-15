@@ -25,9 +25,11 @@ class ApiConfig {
   static final String forexSummary          = "$baseUrl/forex/summary";
   static final String forexScan             = "$baseUrl/forex/scan";
   static final String forexEntryAlerts      = "$baseUrl/forex/entry-alerts";
+  static String forexEntryAlert(String alertId) => "$baseUrl/forex/entry-alerts/$alertId";
   static String forexExecuteEntryAlert(String alertId) => "$baseUrl/forex/entry-alerts/$alertId/execute-demo";
   static String forexExecuteEntryAlertCustom(String alertId) =>
       "$baseUrl/forex/entry-alerts/$alertId/execute-demo-custom";
+  static String forexDeclineEntryAlert(String alertId) => "$baseUrl/forex/entry-alerts/$alertId/decline";
   static final String forexPositions        = "$baseUrl/forex/positions";
   static final String cfdSummary            = "$baseUrl/cfd/summary";
   static final String cfdScan               = "$baseUrl/cfd/scan";

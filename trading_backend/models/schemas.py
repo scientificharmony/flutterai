@@ -268,6 +268,7 @@ class ForexEntryAlertResponse(BaseModel):
     rationale: str
     push_sent: bool
     tracked: bool
+    declined: bool = False
     created_at: datetime
 
 

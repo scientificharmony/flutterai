@@ -315,6 +315,20 @@ If you open a forex position directly in IG (not via Hey Jimmy), the backend wil
 
 Implementation note:
 - For IG-originated positions, Hey Jimmy backfills `risk_amount` from config (`FOREX_RISK_BPS` / `FOREX_DEMO_BALANCE`) and derives `position_units` from the stop distance so PnL can be calculated in-app.
+
+---
+
+## Forex Push: Tap → Review → Execute/Decline
+
+Goal: faster forex execution flow off a push notification.
+
+Implementation:
+- Push payload includes `type=forex_entry_alert` and `alert_id`.
+- App routes notification taps to a dedicated review screen (not the lab list).
+- Screen shows the recommended setup and provides:
+  - `Execute (IG Demo)` (calls `POST /forex/entry-alerts/{id}/execute-demo-custom` with default size=0.5)
+  - `Decline` (calls `POST /forex/entry-alerts/{id}/decline`)
+- Backend records declines (`forex_entry_alerts.declined`, `declined_at`) and treats declined alerts as part of cooldown to avoid repeat spam.
         env_file = ".env"
 
 

@@ -1444,6 +1444,7 @@ class ForexEntryAlert {
   final int positionUnits;
   final String rationale;
   final bool tracked;
+  final bool declined;
 
   const ForexEntryAlert({
     required this.id,
@@ -1458,6 +1459,7 @@ class ForexEntryAlert {
     required this.positionUnits,
     required this.rationale,
     required this.tracked,
+    required this.declined,
   });
 
   factory ForexEntryAlert.fromJson(Map<String, dynamic> json) => ForexEntryAlert(
@@ -1473,6 +1475,7 @@ class ForexEntryAlert {
         positionUnits: (json['position_units'] as num).toInt(),
         rationale: json['rationale'] as String? ?? '',
         tracked: json['tracked'] as bool? ?? false,
+        declined: json['declined'] as bool? ?? false,
       );
 }
 

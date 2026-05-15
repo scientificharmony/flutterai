@@ -66,6 +66,7 @@ class FcmService {
               'trade_alerts',
               'Trade Alerts',
               channelDescription: 'AI-generated market setup notifications',
+              icon: '@mipmap/ic_launcher',
               importance: Importance.high,
               priority: Priority.high,
             ),
