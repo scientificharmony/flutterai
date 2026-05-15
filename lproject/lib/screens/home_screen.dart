@@ -11,6 +11,7 @@ import '../theme/app_theme.dart';
 import 'alert_detail_screen.dart';
 import 'cfd_lab_screen.dart';
 import 'forex_lab_screen.dart';
+import 'forex_pnl_screen.dart';
 import 'holdings_screen.dart';
 import 'mission_screen.dart';
 import 'pie_builder_screen.dart';
@@ -126,6 +127,15 @@ class _HomeScreenState extends State<HomeScreen> {
           onPressed: () => Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const ForexLabScreen()),
+          ),
+        ),
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.bar_chart, size: 19),
+          tooltip: 'P&L Summary',
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const ForexPnlScreen()),
           ),
         ),
         IconButton(

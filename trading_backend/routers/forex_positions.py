@@ -285,6 +285,64 @@ def _sync_closed_ig_positions(user: User, session: Session) -> None:
         session.commit()
 
 
+class ForexPnlSummaryResponse(BaseModel):
+    total_closed: int
+    total_wins: int
+    total_losses: int
+    win_rate: float
+    total_realised_pnl: float
+    avg_win: float
+    avg_loss: float
+    best_trade_pnl: float | None
+    worst_trade_pnl: float | None
+    best_pair: str | None
+    open_count: int
+
+
+@router.get("/pnl-summary", response_model=ForexPnlSummaryResponse)
+def forex_pnl_summary(
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    positions = session.exec(
+        select(ForexPosition).where(ForexPosition.user_id == user.id)
+    ).all()
+
+    closed = [p for p in positions if p.status == "closed" and p.realised_pnl is not None]
+    open_count = sum(1 for p in positions if p.status == "open")
+
+    if not closed:
+        return ForexPnlSummaryResponse(
+            total_closed=0, total_wins=0, total_losses=0, win_rate=0,
+            total_realised_pnl=0, avg_win=0, avg_loss=0,
+            best_trade_pnl=None, worst_trade_pnl=None, best_pair=None, open_count=open_count,
+        )
+
+    wins = [p for p in closed if p.realised_pnl > 0]
+    losses = [p for p in closed if p.realised_pnl <= 0]
+
+    pair_pnl: dict[str, float] = {}
+    for p in closed:
+        pair_pnl[p.pair] = pair_pnl.get(p.pair, 0) + p.realised_pnl
+
+    best_pair = max(pair_pnl, key=pair_pnl.get) if pair_pnl else None
+    sorted_pnl = sorted(p.realised_pnl for p in closed)
+
+    return ForexPnlSummaryResponse(
+        total_closed=len(closed),
+        total_wins=len(wins),
+        total_losses=len(losses),
+        win_rate=round(len(wins) / len(closed) * 100, 1),
+        total_realised_pnl=round(sum(p.realised_pnl for p in closed), 2),
+        avg_win=round(sum(p.realised_pnl for p in wins) / len(wins), 2) if wins else 0,
+        avg_loss=round(sum(p.realised_pnl for p in losses) / len(losses), 2) if losses else 0,
+        best_trade_pnl=round(sorted_pnl[-1], 2) if sorted_pnl else None,
+        worst_trade_pnl=round(sorted_pnl[0], 2) if sorted_pnl else None,
+        best_pair=best_pair,
+        open_count=open_count,
+    )
+
+
 @router.get("", response_model=list[ForexPositionResponse])
 def list_forex_positions(
     user: User = Depends(get_current_user),
