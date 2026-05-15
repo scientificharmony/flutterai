@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     cfd_entry_scan_minutes: int = 15
     cfd_entry_cooldown_hours: int = 4
     forex_entry_scan_minutes: int = 15
-    forex_entry_cooldown_hours: int = 4
+    forex_entry_cooldown_hours: float = 4
     forex_ig_demo_size: float = 0.5
     forex_execution_max_slippage_pips: int = 15
     forex_atr_stop_multiplier: float = 1.5
