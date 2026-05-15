@@ -503,17 +503,37 @@ def place_ig_demo_position(
     deal_reference = response.json().get("dealReference", "")
     deal_id = ""
     if deal_reference:
-        try:
-            confirm = httpx.get(
-                f"{_ig_base_url()}/confirms/{deal_reference}",
-                headers=_ig_headers(session=session),
-                timeout=12.0,
-            )
-            confirm.raise_for_status()
-            confirm_data = confirm.json()
-            deal_id = confirm_data.get("dealId") or ""
-        except Exception as exc:
-            logger.warning("IG demo deal confirm failed for %s: %s", deal_reference, exc)
+        # IG confirms endpoint can briefly return 404 right after placing a deal.
+        # Retry a few times before giving up, then fall back to matching the deal
+        # from the open positions list.
+        confirm_data = None
+        for attempt in range(4):
+            try:
+                confirm = httpx.get(
+                    f"{_ig_base_url()}/confirms/{deal_reference}",
+                    headers=_ig_headers(session=session),
+                    timeout=12.0,
+                )
+                confirm.raise_for_status()
+                confirm_data = confirm.json()
+                deal_id = confirm_data.get("dealId") or ""
+                break
+            except Exception as exc:
+                if attempt == 3:
+                    logger.warning("IG demo deal confirm failed for %s: %s", deal_reference, exc)
+                else:
+                    # 0.25s, 0.5s, 0.75s backoff
+                    import time
+                    time.sleep(0.25 * (attempt + 1))
+
+        if not deal_id:
+            try:
+                open_pos = get_ig_open_positions()
+                candidates = [p for p in open_pos if p.epic == epic and p.direction == ig_direction and abs(p.size - size) < 1e-6]
+                if candidates:
+                    deal_id = candidates[0].deal_id
+            except Exception:
+                pass
     return IgPlacedPosition(
         deal_id=deal_id,
         deal_reference=deal_reference,
