@@ -17,6 +17,15 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/forex", tags=["forex"])
 
+
+@router.post("/admin/trigger-entry-scanner")
+async def trigger_entry_scanner():
+    """Manually trigger the forex entry scanner job for diagnostics."""
+    from workers.forex_entry_scanner_job import run_forex_entry_scanner
+    await run_forex_entry_scanner()
+    return {"status": "triggered"}
+
+
 class ForexExecuteCustomBody(BaseModel):
     size: float = Field(..., gt=0, le=50)
     stop_loss: float
