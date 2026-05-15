@@ -33,6 +33,16 @@ DEFAULT_FOREX_PAIRS = [
     "AUD/NZD",
     "EUR/CAD",
     "GBP/CAD",
+    "NZD/JPY",
+    "NZD/CAD",
+    "NZD/CHF",
+    "AUD/CAD",
+    "AUD/CHF",
+    "GBP/NZD",
+    "EUR/NZD",
+    "USD/SGD",
+    "USD/NOK",
+    "USD/SEK",
 ]
 
 

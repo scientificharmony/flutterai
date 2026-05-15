@@ -38,6 +38,16 @@ class _ForexLabScreenState extends State<ForexLabScreen> with RouteAware {
     _ForexPair('AUD/NZD', 'Regional cross', 'Asia', 'Australia/New Zealand relative strength'),
     _ForexPair('EUR/CAD', 'Cross', 'London + New York', 'Euro versus commodity currency'),
     _ForexPair('GBP/CAD', 'Cross', 'London + New York', 'Sterling versus commodity currency'),
+    _ForexPair('NZD/JPY', 'Risk cross', 'Asia + Tokyo', 'Kiwi-yen risk sentiment pair'),
+    _ForexPair('NZD/CAD', 'Cross', 'Asia + New York', 'Kiwi versus commodity currency'),
+    _ForexPair('NZD/CHF', 'Cross', 'Asia + London', 'Kiwi versus safe-haven franc'),
+    _ForexPair('AUD/CAD', 'Commodity cross', 'Asia + New York', 'Dual commodity currency pair'),
+    _ForexPair('AUD/CHF', 'Cross', 'Asia + London', 'Aussie versus safe-haven franc'),
+    _ForexPair('GBP/NZD', 'Volatile cross', 'London + Asia', 'Wide-ranging sterling cross'),
+    _ForexPair('EUR/NZD', 'Cross', 'London + Asia', 'Euro versus kiwi dollar'),
+    _ForexPair('USD/SGD', 'Asian major', 'Asia', 'Dollar versus Singapore dollar'),
+    _ForexPair('USD/NOK', 'Scandinavian', 'London + New York', 'Dollar versus Norwegian krone'),
+    _ForexPair('USD/SEK', 'Scandinavian', 'London + New York', 'Dollar versus Swedish krona'),
   ];
 
   int _riskBps = 50;
