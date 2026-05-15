@@ -11,11 +11,24 @@ from database import get_session
 from models.db_models import ForexEntryAlert, ForexPosition, User
 from models.schemas import ForexEntryAlertResponse, ForexScanRequest, ForexSummaryResponse
 from routers.forex_positions import ForexPositionResponse, _to_response
-from services.forex_service import find_matching_ig_position, get_forex_mid_price, get_forex_summary, place_ig_demo_position
+from services.forex_service import find_matching_ig_position, get_forex_mid_price, get_forex_summary, get_ig_live_balance, place_ig_demo_position
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/forex", tags=["forex"])
+
+
+@router.get("/debug/balance")
+def debug_ig_balance():
+    """Temporary diagnostic — shows raw IG live balance fetch result."""
+    import httpx
+    from services.forex_service import _get_ig_session, _ig_base_url, _ig_headers
+    try:
+        session = _get_ig_session()
+        resp = httpx.get(f"{_ig_base_url()}/accounts", headers=_ig_headers(session=session), timeout=8.0)
+        return {"status": resp.status_code, "body": resp.json()}
+    except Exception as exc:
+        return {"error": str(exc)}
 
 class ForexExecuteCustomBody(BaseModel):
     size: float = Field(..., gt=0, le=50)
