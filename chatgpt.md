@@ -5190,6 +5190,12 @@ The scheduled market scanner (`market_scan`) is configured on a 15 minute interv
 ### Forex auto-close sync note
 If a forex position is linked to IG (`ig_deal_id` present) but the IG deal is no longer open (for example because IG already closed it), the forex position monitor will now automatically mark the Hey Jimmy position as `closed` to keep the app in sync.
 
+Auto-close bugfix:
+- IG auto-close requests require the close direction to be the opposite of the original IG direction (BUY/SELL).
+- Our positions store the original signal direction (LONG/SHORT), so we now map:
+  - `LONG -> close SELL`
+  - `SHORT -> close BUY`
+
 ### Trading212 ticker validation note
 Some clean tickers in the default watchlists (e.g. certain ETFs) may not appear as unique symbols in Trading212's instrument metadata feed. For scan/push purposes we allow a small fallback mapping so these are not dropped as `UNKNOWN` validation failures. This does not enable any order execution.
 

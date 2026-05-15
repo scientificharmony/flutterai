@@ -357,6 +357,22 @@ def _close_direction_for_position(direction: str) -> str:
     return "SELL" if direction.upper() == "BUY" else "BUY"
 
 
+def _close_direction_for_forex(direction: str) -> str:
+    """
+    Close direction for a forex position when we only know the signal direction
+    (LONG/SHORT) rather than IG's BUY/SELL direction.
+
+    LONG -> open was BUY -> close must be SELL
+    SHORT -> open was SELL -> close must be BUY
+    """
+    d = (direction or "").upper()
+    if d == "LONG":
+        return "SELL"
+    if d == "SHORT":
+        return "BUY"
+    return _close_direction_for_position(d)
+
+
 def _normalise_market_text(value: str | None) -> str:
     return "".join(ch for ch in (value or "").upper() if ch.isalnum())
 
@@ -517,7 +533,7 @@ def close_ig_position(deal_id: str, direction: str, size: float) -> str:
         headers=_ig_headers(version="1", session=session),
         json={
             "dealId": deal_id,
-            "direction": _close_direction_for_position(direction),
+            "direction": _close_direction_for_forex(direction),
             "orderType": "MARKET",
             "size": size,
         },
