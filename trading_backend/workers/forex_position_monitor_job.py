@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 
 from sqlmodel import Session, select
 
@@ -8,6 +9,8 @@ from models.db_models import DeviceToken, ForexPosition
 from routers.forex_positions import _calculate_pnl, assistant_guidance
 from services.forex_service import get_forex_mid_price
 from services.forex_service import close_ig_position
+from services.forex_service import get_ig_open_positions
+from services.forex_service import provider_connected
 from services.notification_service import send_to_user_devices
 
 logger = logging.getLogger(__name__)
@@ -77,6 +80,24 @@ def _check_position(pos: ForexPosition, session: Session) -> None:
                 session.add(pos)
                 logger.info("Forex monitor: push sent | pair=%s | status=%s", pos.pair, status)
 
+    # If IG no longer reports this deal as open, treat it as closed even if our DB says open.
+    if pos.ig_deal_id and pos.status == "open" and provider_connected():
+        try:
+            open_ids = {p.deal_id for p in get_ig_open_positions()}
+            if pos.ig_deal_id not in open_ids:
+                pos.status = "closed"
+                pos.close_price = current_price
+                pos.realised_pnl = pnl
+                pos.closed_at = datetime.now(timezone.utc)
+                pos.last_assistant_status = "CLOSED"
+                pos.last_notified_status = "CLOSED"
+                session.add(pos)
+                logger.info("Forex monitor: position already closed in IG | pair=%s | deal_id=%s", pos.pair, pos.ig_deal_id)
+                session.commit()
+                return
+        except Exception as exc:
+            logger.warning("Forex monitor: IG open-position sync failed | pair=%s | deal_id=%s | error=%s", pos.pair, pos.ig_deal_id, exc)
+
     if _should_auto_close(pos, status):
         try:
             close_ig_position(pos.ig_deal_id, pos.direction, pos.ig_size)
@@ -84,6 +105,7 @@ def _check_position(pos: ForexPosition, session: Session) -> None:
             pos.close_price = current_price
             pos.realised_pnl = pnl
             pos.last_notified_status = status
+            pos.closed_at = datetime.now(timezone.utc)
             logger.info("Forex monitor: IG demo auto-close sent | pair=%s | status=%s", pos.pair, status)
             if settings.ENABLE_PUSH_NOTIFICATIONS:
                 tokens = session.exec(

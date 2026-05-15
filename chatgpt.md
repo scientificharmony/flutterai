@@ -5187,6 +5187,9 @@ The scanner has an internal action `WATCH` for non-actionable results.
 ### Scheduler note
 The scheduled market scanner (`market_scan`) is configured on a 15 minute interval. It is now set to run once shortly after backend startup so frequent service restarts during setup don't prevent it from ever running.
 
+### Forex auto-close sync note
+If a forex position is linked to IG (`ig_deal_id` present) but the IG deal is no longer open (for example because IG already closed it), the forex position monitor will now automatically mark the Hey Jimmy position as `closed` to keep the app in sync.
+
 ### Trading212 ticker validation note
 Some clean tickers in the default watchlists (e.g. certain ETFs) may not appear as unique symbols in Trading212's instrument metadata feed. For scan/push purposes we allow a small fallback mapping so these are not dropped as `UNKNOWN` validation failures. This does not enable any order execution.
 
