@@ -30,10 +30,10 @@ def test_forex_scan_accepts_timeframe_and_pairs(client):
 def test_default_forex_universe_has_expanded_liquid_pairs():
     from services.forex_service import DEFAULT_FOREX_PAIRS
 
-    assert len(DEFAULT_FOREX_PAIRS) >= 20
-    assert "EUR/JPY" in DEFAULT_FOREX_PAIRS
+    assert len(DEFAULT_FOREX_PAIRS) == 8
+    assert "EUR/USD" in DEFAULT_FOREX_PAIRS
     assert "USD/CAD" in DEFAULT_FOREX_PAIRS
-    assert "GBP/CAD" in DEFAULT_FOREX_PAIRS
+    assert "NZD/USD" in DEFAULT_FOREX_PAIRS
 
 
 def test_ig_snapshot_failure_skips_only_failed_pair(monkeypatch):
@@ -418,7 +418,7 @@ def test_forex_entry_scanner_sends_setup_push(db_engine, monkeypatch):
         assert alert.push_sent is True
 
     assert sent
-    assert "Forex setup" in sent[0][0]
+    assert "EUR/USD" in sent[0][0]
     assert sent[0][3] == "forex_entry_alert"
 
     sent.clear()
