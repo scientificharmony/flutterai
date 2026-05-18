@@ -646,6 +646,8 @@ def place_ig_demo_position(
                     raise RuntimeError(f"IG rejected the trade: {reason}")
                 deal_id = confirm_data.get("dealId") or ""
                 break
+              except RuntimeError:
+                raise
             except Exception as exc:
                 if attempt == 3:
                     logger.warning("IG demo deal confirm failed for %s: %s", deal_reference, exc)
