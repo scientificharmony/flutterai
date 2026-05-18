@@ -722,16 +722,6 @@ class _RiskControls extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _SliderRow(
-            label: 'Risk per trade',
-            value: riskBps / 100,
-            suffix: '%',
-            min: 0.25,
-            max: 1.0,
-            divisions: 3,
-            onChanged: (value) => onRiskChanged(value * 100),
-          ),
-          const SizedBox(height: 12),
-          _SliderRow(
             label: 'Minimum signal strength',
             value: minStrength.toDouble(),
             suffix: '',
