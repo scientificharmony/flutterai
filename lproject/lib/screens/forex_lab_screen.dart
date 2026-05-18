@@ -494,6 +494,31 @@ class _ForexLabScreenState extends State<ForexLabScreen> with RouteAware {
     }
   }
 
+  void _openChartPicker() {
+    final pairs = _pairs.map((p) => p.symbol).toList();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => ListView.builder(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        itemCount: pairs.length,
+        itemBuilder: (_, i) => ListTile(
+          title: Text(pairs[i],
+              style: GoogleFonts.orbitron(color: AppColors.textPrimary, fontSize: 13)),
+          trailing: const Icon(Icons.chevron_right, color: AppColors.textMuted),
+          onTap: () {
+            Navigator.pop(ctx);
+            Navigator.push(context,
+                MaterialPageRoute(builder: (_) => ForexChartScreen(pair: pairs[i])));
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -503,11 +528,14 @@ class _ForexLabScreenState extends State<ForexLabScreen> with RouteAware {
                 color: AppColors.cyan, fontWeight: FontWeight.w700, fontSize: 15)),
         actions: [
           IconButton(
+            icon: const Icon(Icons.candlestick_chart, size: 20),
+            tooltip: 'Chart',
+            onPressed: () => _openChartPicker(),
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh, size: 20),
             tooltip: 'Refresh',
-            onPressed: () {
-              _loadSummary();
-            },
+            onPressed: _loadSummary,
           ),
         ],
       ),
