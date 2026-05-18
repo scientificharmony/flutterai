@@ -172,7 +172,7 @@ def get_ig_live_balance() -> float:
                 return value
     except Exception as exc:
         logger.warning("IG live balance fetch failed, using env var fallback: %s", exc)
-    return settings.FOREX_DEMO_BALANCE
+    return settings.FOREX_ACCOUNT_BALANCE
 _SNAPSHOT_CACHE_SECONDS = 60.0
 
 

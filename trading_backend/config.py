@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     stop_loss_pct: float = 5.0
     stale_position_days: int = 14
     forex_provider: str = "mock"
-    forex_demo_balance: float = 5000.0
+    forex_account_balance: float = 5000.0
     forex_risk_bps: int = 50
     forex_min_signal_strength: int = 78
     enable_forex_auto_close: bool = False
@@ -125,7 +125,7 @@ class Settings(BaseSettings):
     @property
     def FOREX_PROVIDER(self) -> str: return self.forex_provider
     @property
-    def FOREX_DEMO_BALANCE(self) -> float: return self.forex_demo_balance
+    def FOREX_ACCOUNT_BALANCE(self) -> float: return self.forex_account_balance
     @property
     def FOREX_RISK_BPS(self) -> int: return self.forex_risk_bps
     @property
