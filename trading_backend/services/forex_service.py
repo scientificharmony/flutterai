@@ -26,10 +26,22 @@ DEFAULT_FOREX_PAIRS = [
     "EUR/GBP",
     "EUR/JPY",
     "EUR/CHF",
+    "EUR/AUD",
+    "EUR/CAD",
+    "EUR/NZD",
     "GBP/JPY",
     "GBP/CHF",
+    "GBP/AUD",
+    "GBP/CAD",
+    "GBP/NZD",
     "AUD/JPY",
+    "AUD/CAD",
+    "AUD/CHF",
     "NZD/JPY",
+    "NZD/CAD",
+    "NZD/CHF",
+    "CAD/JPY",
+    "CHF/JPY",
 ]
 
 
