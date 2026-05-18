@@ -39,21 +39,35 @@ class _ForexChartScreenState extends State<ForexChartScreen> {
       if (res.statusCode == 200) {
         final json = jsonDecode(res.body) as Map<String, dynamic>;
         final bars = (json['bars'] as List).cast<Map<String, dynamic>>();
-        final candles = bars.map((b) => Candle(
-          date: DateTime.parse(b['t'] as String),
-          open: (b['o'] as num).toDouble(),
-          high: (b['h'] as num).toDouble(),
-          low: (b['l'] as num).toDouble(),
-          close: (b['c'] as num).toDouble(),
-          volume: (b['v'] as num).toDouble(),
-        )).toList();
-        // candlesticks package expects newest-first
-        setState(() => _candles = candles.reversed.toList());
+        final candles = <Candle>[];
+        for (final b in bars) {
+          try {
+            // Python str(idx) produces e.g. "2024-01-15 09:00:00+00:00"
+            // DateTime.parse needs ISO 8601 — replace space with T
+            final raw = (b['t'] as String).replaceFirst(' ', 'T');
+            candles.add(Candle(
+              date: DateTime.parse(raw).toLocal(),
+              open: (b['o'] as num).toDouble(),
+              high: (b['h'] as num).toDouble(),
+              low: (b['l'] as num).toDouble(),
+              close: (b['c'] as num).toDouble(),
+              volume: (b['v'] as num).toDouble(),
+            ));
+          } catch (_) {
+            // skip malformed bar
+          }
+        }
+        if (candles.isEmpty) {
+          setState(() => _error = 'Could not parse chart data.');
+        } else {
+          // candlesticks package expects newest-first
+          setState(() => _candles = candles.reversed.toList());
+        }
       } else {
         setState(() => _error = 'No chart data (${res.statusCode})');
       }
-    } catch (_) {
-      setState(() => _error = 'Backend unavailable.');
+    } catch (e) {
+      setState(() => _error = 'Error: $e');
     } finally {
       setState(() => _loading = false);
     }
