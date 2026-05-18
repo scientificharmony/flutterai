@@ -193,6 +193,14 @@ class _AlertBody extends StatelessWidget {
                   style: GoogleFonts.dmSans(color: AppColors.textMuted)),
               const SizedBox(height: 12),
               _RowLine(label: 'Entry', value: alert.entryPrice.toStringAsFixed(5)),
+              if (alert.currentPrice != null)
+                _RowLine(
+                  label: 'Now',
+                  value: alert.currentPrice!.toStringAsFixed(5),
+                  valueColor: alert.currentPrice! > alert.entryPrice
+                      ? (alert.direction == 'LONG' ? AppColors.green : AppColors.pink)
+                      : (alert.direction == 'LONG' ? AppColors.pink : AppColors.green),
+                ),
               _RowLine(label: 'Stop', value: alert.stopLoss.toStringAsFixed(5)),
               _RowLine(label: 'Target', value: alert.takeProfit.toStringAsFixed(5)),
             ],
@@ -262,8 +270,9 @@ class _AlertBody extends StatelessWidget {
 class _RowLine extends StatelessWidget {
   final String label;
   final String value;
+  final Color? valueColor;
 
-  const _RowLine({required this.label, required this.value});
+  const _RowLine({required this.label, required this.value, this.valueColor});
 
   @override
   Widget build(BuildContext context) {
@@ -272,7 +281,7 @@ class _RowLine extends StatelessWidget {
       child: Row(
         children: [
           SizedBox(width: 64, child: Text(label, style: GoogleFonts.dmSans(color: AppColors.textMuted))),
-          Expanded(child: Text(value, style: GoogleFonts.dmSans(color: AppColors.textPrimary))),
+          Expanded(child: Text(value, style: GoogleFonts.dmSans(color: valueColor ?? AppColors.textPrimary))),
         ],
       ),
     );

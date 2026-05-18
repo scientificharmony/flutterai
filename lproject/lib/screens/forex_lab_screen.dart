@@ -7,6 +7,7 @@ import '../config/api_config.dart';
 import '../main.dart' show routeObserver;
 import '../services/device_service.dart';
 import '../theme/app_theme.dart';
+import 'forex_alert_history_screen.dart';
 import 'forex_chart_screen.dart';
 
 class ForexLabScreen extends StatefulWidget {
@@ -527,6 +528,13 @@ class _ForexLabScreenState extends State<ForexLabScreen> with RouteAware {
             style: GoogleFonts.orbitron(
                 color: AppColors.cyan, fontWeight: FontWeight.w700, fontSize: 15)),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.history, size: 20),
+            tooltip: 'Alert History',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ForexAlertHistoryScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.candlestick_chart, size: 20),
             tooltip: 'Chart',
@@ -1650,6 +1658,7 @@ class ForexEntryAlert {
   final bool tracked;
   final bool declined;
   final DateTime createdAt;
+  final double? currentPrice;
 
   const ForexEntryAlert({
     required this.id,
@@ -1666,6 +1675,7 @@ class ForexEntryAlert {
     required this.tracked,
     required this.declined,
     required this.createdAt,
+    this.currentPrice,
   });
 
   factory ForexEntryAlert.fromJson(Map<String, dynamic> json) => ForexEntryAlert(
@@ -1685,6 +1695,9 @@ class ForexEntryAlert {
         createdAt: json['created_at'] != null
             ? DateTime.parse(json['created_at'] as String)
             : DateTime.now(),
+        currentPrice: json['current_price'] != null
+            ? (json['current_price'] as num).toDouble()
+            : null,
       );
 }
 
