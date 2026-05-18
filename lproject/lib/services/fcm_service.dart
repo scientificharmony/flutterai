@@ -61,7 +61,7 @@ class FcmService {
           notification.hashCode,
           notification.title,
           notification.body,
-          NotificationDetails(
+          const NotificationDetails(
             android: AndroidNotificationDetails(
               'trade_alerts',
               'Trade Alerts',

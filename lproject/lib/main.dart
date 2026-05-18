@@ -5,7 +5,6 @@ import 'theme/app_theme.dart';
 import 'screens/alert_detail_screen.dart';
 import 'screens/forex_entry_alert_review_screen.dart';
 import 'screens/forex_lab_screen.dart';
-import 'screens/home_screen.dart';
 import 'screens/notification_debug_screen.dart';
 import 'services/device_service.dart';
 import 'services/fcm_service.dart';

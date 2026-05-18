@@ -292,15 +292,15 @@ class _ForexLabScreenState extends State<ForexLabScreen> with RouteAware {
         TextEditingController(text: alert.takeProfit.toStringAsFixed(5));
     bool usePoints = false;
 
-    double _pipSize(String pair) => pair.contains('JPY') ? 0.01 : 0.0001;
+    double pipSize(String pair) => pair.contains('JPY') ? 0.01 : 0.0001;
 
-    void _setControllersFromMode() {
+    void setControllersFromMode() {
       if (!usePoints) {
         stopController.text = alert.stopLoss.toStringAsFixed(5);
         targetController.text = alert.takeProfit.toStringAsFixed(5);
         return;
       }
-      final pip = _pipSize(alert.pair);
+      final pip = pipSize(alert.pair);
       final stopPts = (alert.entryPrice - alert.stopLoss).abs() / pip;
       final tpPts = (alert.takeProfit - alert.entryPrice).abs() / pip;
       stopController.text = stopPts.toStringAsFixed(1);
@@ -333,7 +333,7 @@ class _ForexLabScreenState extends State<ForexLabScreen> with RouteAware {
                         if (v) {
                           setLocalState(() {
                             usePoints = false;
-                            _setControllersFromMode();
+                            setControllersFromMode();
                           });
                         }
                       },
@@ -346,7 +346,7 @@ class _ForexLabScreenState extends State<ForexLabScreen> with RouteAware {
                         if (v) {
                           setLocalState(() {
                             usePoints = true;
-                            _setControllersFromMode();
+                            setControllersFromMode();
                           });
                         }
                       },
@@ -403,7 +403,7 @@ class _ForexLabScreenState extends State<ForexLabScreen> with RouteAware {
                     return;
                   }
 
-                  final pip = _pipSize(alert.pair);
+                  final pip = pipSize(alert.pair);
                   final isLong = alert.direction == 'LONG';
                   final stop = usePoints
                       ? (isLong ? alert.entryPrice - (stopRaw * pip) : alert.entryPrice + (stopRaw * pip))
@@ -1486,7 +1486,7 @@ class _ClosedPositionTile extends StatelessWidget {
     final pnlColor = isWin ? AppColors.green : pnl < 0 ? AppColors.pink : AppColors.textMuted;
     final dirColor = position.direction == 'LONG' ? AppColors.green : AppColors.pink;
 
-    String _fmt(DateTime? dt) {
+    String fmt(DateTime? dt) {
       if (dt == null) return '-';
       return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
     }
@@ -1522,7 +1522,7 @@ class _ClosedPositionTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  _fmt(position.closedAt),
+                  fmt(position.closedAt),
                   style: GoogleFonts.dmSans(color: AppColors.textMuted.withValues(alpha: 0.6), fontSize: 10),
                 ),
               ],
