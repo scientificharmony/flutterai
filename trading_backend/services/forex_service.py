@@ -14,6 +14,7 @@ from services.market_data import get_forex_ohlcv
 logger = logging.getLogger(__name__)
 
 DEFAULT_FOREX_PAIRS = [
+    # G7 majors
     "EUR/USD",
     "GBP/USD",
     "USD/JPY",
@@ -21,7 +22,14 @@ DEFAULT_FOREX_PAIRS = [
     "USD/CAD",
     "AUD/USD",
     "NZD/USD",
+    # Major crosses
     "EUR/GBP",
+    "EUR/JPY",
+    "EUR/CHF",
+    "GBP/JPY",
+    "GBP/CHF",
+    "AUD/JPY",
+    "NZD/JPY",
 ]
 
 
