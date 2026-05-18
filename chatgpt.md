@@ -5516,3 +5516,64 @@ Fixed all 17 issues:
 - Scanner running every 15 min, R:R filter blocking all current signals (~1.33)
 - London/New York overlap active until ~17:00 UTC — best window for 2:1 setups
 - Next good window if nothing fires today: London open ~08:00 UTC tomorrow
+
+---
+
+## Session: 2026-05-18 (continued) — Server recovery, £1000 balance, alert expiry
+
+### Alert expiry — 2-hour window
+Both `forex_lab_screen.dart` and `forex_entry_alert_review_screen.dart` now disable the Execute button on alerts older than 2 hours. Shows pink warning: "Setup expired — check current price before trading." Prevents accidentally executing overnight setups on waking.
+
+`ForexEntryAlert` model gained `createdAt` field parsed from backend `created_at` JSON field.
+
+### Balance updated to £1000
+IG account funded to £1000. Risk profile:
+- Size 1 lot, ~£250 margin per trade
+- Max 3 concurrent positions (keep 1 slot as margin buffer)
+- Risk per trade: £125 (12.5% of balance, down from 25%)
+- Best case: 3 winners at 2:1 = +£750 in one session
+
+### Server recovery
+`tradingbot.service` unit file and venv were lost (server state wiped). Rebuilt from scratch:
+- Recreated `/etc/systemd/system/tradingbot.service`
+- Rebuilt venv: `python3 -m venv venv && pip install -r requirements.txt`
+- Recreated `.env` with IG credentials, `FOREX_IG_SIZE=1`, `FOREX_RISK_BPS=2500`
+- Added `extra="ignore"` to `SettingsConfigDict` in `config.py` so pydantic ignores IG/forex env vars it doesn't own
+- Recreated `/etc/sudoers.d/tradingbot` for passwordless systemctl
+- Service confirmed active and scheduler running
+
+### Key deploy commands (for future recovery)
+```bash
+# On server as root:
+cat > /etc/systemd/system/tradingbot.service << 'SVCEOF'
+[Unit]
+Description=Hey Jimmy Trading Bot
+After=network.target
+
+[Service]
+Type=simple
+User=tradingbot
+WorkingDirectory=/home/tradingbot/flutterai/trading_backend
+ExecStart=/home/tradingbot/flutterai/trading_backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=10
+EnvironmentFile=/home/tradingbot/flutterai/trading_backend/.env
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+
+echo "tradingbot ALL=(ALL) NOPASSWD: /bin/systemctl" > /etc/sudoers.d/tradingbot
+chmod 440 /etc/sudoers.d/tradingbot
+systemctl daemon-reload && systemctl enable --now tradingbot
+```
+
+### Git commits this session
+| Hash | Message |
+|------|---------|
+| `c3f3bb7` | feat: add 2-hour alert expiry to prevent stale overnight trade execution |
+
+### Current state
+- Server: active, scheduler running (15m scan, 8 major pairs, 2:1 R:R filter)
+- App: release APK installed on Samsung S25 Ultra
+- IG: £1000 live account, size 1 lot
