@@ -5388,3 +5388,27 @@ All Trading212, ETF scanner, Pie Builder, and Holdings code removed.
 - This week: manual execution by user, backend monitors and auto-closes
 - If profitable: move to automated trade entry (remove manual tap step) with daily loss limit safety net
 - Goal: fully automated scan → entry → manage → close cycle
+
+---
+
+### Session: 2026-05-18 — Bug fixes, deployment & IG 403 rate limit fix
+
+#### Issues fixed
+1. **Trade size 0.5 → 0.1** — Flutter hardcoded `'size': 0.5` in `forex_entry_alert_review_screen.dart` despite `.env` having `FOREX_IG_SIZE=0.1`. Fixed to `0.1`.
+2. **Ghost positions (IG INSUFFICIENT_FUNDS swallowed)** — `RuntimeError` raised inside the deal confirm retry loop was caught by bare `except Exception` on attempt 3, silently logged, and execution continued recording a fake DB position. Fixed by adding `except RuntimeError: raise` before the generic handler.
+3. **Notification tap not navigating to FOREX ALERT screen** — `onMessageOpenedApp` not reliable on Samsung. Fixed by adding `WidgetsBindingObserver` to `_AITradingAppState` and calling `getInitialMessage()` on app resume via `didChangeAppLifecycleState`.
+4. **Wrong Firebase import** — `fcm_service.dart` had `package:firebasemessaging/firebasemessaging.dart` (non-existent package). Fixed to `package:firebase_messaging/firebase_messaging.dart`.
+5. **IG session 403 flood** — Snapshot cache TTL was 60s; app 30s polls triggered a full ~40-pair IG API fetch every other poll, exhausting the session mid-batch. Fixed: TTL raised to 300s. Added mid-batch re-auth: if IG returns 401/403 on a market fetch, session is cleared and re-authenticated before retrying once.
+
+#### Flutter changes
+- `lproject/lib/screens/forex_entry_alert_review_screen.dart`: size `0.5` → `0.1`
+- `lproject/lib/main.dart`: added `WidgetsBindingObserver` mixin, `didChangeAppLifecycleState`, `_checkInitialMessage()`
+- `lproject/lib/services/fcm_service.dart`: fixed import, renamed `_messaging` → `messaging` (public field so `main.dart` can call `getInitialMessage()`)
+
+#### Backend changes
+- `trading_backend/services/forex_service.py`: `except RuntimeError: raise` in deal confirm loop; `_SNAPSHOT_CACHE_SECONDS` 60 → 300; re-auth on 401/403 in `_ig_snapshot()`
+
+#### Device / infra
+- IG live account funded to £500
+- Samsung battery optimisation set to Unrestricted (FCM now delivers reliably)
+- APK rebuilt and installed: `flutter build apk --debug --dart-define=ENABLE_FIREBASE=true`
