@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -258,6 +258,11 @@ def _sync_closed_ig_positions(user: User, session: Session) -> None:
 
     changed = False
     now = datetime.now(timezone.utc)
+    # Give IG 60 seconds to settle a newly placed trade before treating its
+    # absence from /positions as a closure.  Without this, the immediate
+    # GET /forex/positions call after execute marks the trade closed (pnl=0)
+    # before IG has propagated the deal to its positions feed.
+    settle_cutoff = now - timedelta(seconds=60)
     positions = session.exec(
         select(ForexPosition).where(
             ForexPosition.user_id == user.id,
@@ -269,6 +274,10 @@ def _sync_closed_ig_positions(user: User, session: Session) -> None:
         if not pos.ig_deal_id:
             continue
         if pos.ig_deal_id in open_ids:
+            continue
+        # Skip positions opened within the last 60 s — IG may not have settled yet.
+        opened_utc = pos.opened_at.replace(tzinfo=timezone.utc) if pos.opened_at and pos.opened_at.tzinfo is None else pos.opened_at
+        if opened_utc and opened_utc > settle_cutoff:
             continue
         close_price = get_forex_mid_price(pos.pair)
         realised_pnl, _ = _calculate_pnl(pos, close_price) if close_price is not None else (None, None)
