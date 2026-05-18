@@ -321,3 +321,43 @@ def execute_forex_entry_alert_demo_custom(
 
 def _pip_size(pair: str) -> float:
     return 0.01 if pair.endswith("/JPY") else 0.0001
+
+
+# ── Chart endpoint ────────────────────────────────────────────────────────────
+
+from services.market_data import get_forex_ohlcv  # noqa: E402
+
+
+class OhlcvBar(BaseModel):
+    t: str
+    o: float
+    h: float
+    l: float
+    c: float
+    v: float
+
+
+@router.get("/chart")
+def forex_chart(
+    pair: str,
+    interval: str = "1h",
+    _: User = Depends(get_current_user),
+):
+    if interval not in {"1h", "4h", "1d"}:
+        raise HTTPException(status_code=422, detail="interval must be 1h, 4h, or 1d")
+    period_map = {"1h": "60d", "4h": "60d", "1d": "365d"}
+    yf_interval = "1d" if interval == "1d" else "1h"
+    data = get_forex_ohlcv(pair, period=period_map[interval], interval=yf_interval)
+    if data is None:
+        raise HTTPException(status_code=404, detail=f"No chart data available for {pair}")
+    df = data.df
+    if interval == "4h":
+        df = df.resample("4h").agg(
+            {"Open": "first", "High": "max", "Low": "min", "Close": "last", "Volume": "sum"}
+        ).dropna()
+    bars = [
+        OhlcvBar(t=str(idx), o=float(row.Open), h=float(row.High),
+                 l=float(row.Low), c=float(row.Close), v=float(row.Volume))
+        for idx, row in df.iterrows()
+    ]
+    return {"pair": pair, "interval": interval, "bars": [b.model_dump() for b in bars]}

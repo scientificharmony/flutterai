@@ -5,7 +5,7 @@ from fastapi import FastAPI
 
 from config import settings
 from database import create_db_and_tables
-from routers import health, scan, alerts, notifications, pie, holdings, forex, forex_positions, cfd
+from routers import health, alerts, notifications, forex, forex_positions, cfd
 from workers.scheduler import start_scheduler, stop_scheduler
 
 logging.basicConfig(
@@ -25,11 +25,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Flutter AI", version="3.0.0", lifespan=lifespan)
 
 app.include_router(health.router)
-app.include_router(scan.router)
 app.include_router(alerts.router)
 app.include_router(notifications.router)
-app.include_router(pie.router)
-app.include_router(holdings.router)
 app.include_router(forex.router)
 app.include_router(forex_positions.router)
 app.include_router(cfd.router)

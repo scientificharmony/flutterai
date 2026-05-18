@@ -7,6 +7,7 @@ import '../config/api_config.dart';
 import '../main.dart' show routeObserver;
 import '../services/device_service.dart';
 import '../theme/app_theme.dart';
+import 'forex_chart_screen.dart';
 
 class ForexLabScreen extends StatefulWidget {
   final String? initialEntryAlertId;
@@ -820,6 +821,17 @@ class _SignalTile extends StatelessWidget {
               const Spacer(),
               Text('${signal.strength}/100',
                   style: GoogleFonts.dmSans(color: color, fontWeight: FontWeight.w700)),
+              const SizedBox(width: 4),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.candlestick_chart, size: 18, color: AppColors.cyan),
+                tooltip: 'Chart',
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => ForexChartScreen(pair: signal.pair)),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 10),

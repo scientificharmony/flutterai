@@ -10,8 +10,7 @@ def health():
     return HealthResponse(
         status="ok",
         claude_configured=bool(settings.ANTHROPIC_API_KEY),
-        trading212_configured=bool(settings.T212_API_KEY),
-        mode=settings.T212_ENV,
+        mode=settings.app_mode,
     )
 
 

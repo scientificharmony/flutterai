@@ -13,13 +13,10 @@ from models.schemas import (
     CloseTradeRequest,
     SignalPerformanceResponse,
 )
-from services.trading212_service import get_t212_ticker
-
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
 
 def _to_response(alert: TradeAlert) -> TradeAlertResponse:
-    t212_ticker = get_t212_ticker(alert.ticker)
     return TradeAlertResponse(
         id=alert.id,
         ticker=alert.ticker,
@@ -36,9 +33,6 @@ def _to_response(alert: TradeAlert) -> TradeAlertResponse:
         action_label=alert.action_label,
         score_interpretation=alert.score_interpretation,
         action_strength_disclaimer=alert.action_strength_disclaimer,
-        trading212_review_enabled=alert.trading212_review_enabled,
-        t212_ticker=t212_ticker,
-        t212_review_url=f"https://www.trading212.com/trading-instruments/invest/{t212_ticker}" if t212_ticker else None,
         what_is_this=alert.what_is_this,
         sell_trigger=alert.sell_trigger,
         suggested_amount=alert.suggested_amount,

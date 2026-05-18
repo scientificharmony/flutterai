@@ -89,9 +89,6 @@ class TradeAlertResponse(BaseModel):
     action_label: str
     score_interpretation: str
     action_strength_disclaimer: str = ACTION_STRENGTH_DISCLAIMER
-    trading212_review_enabled: bool
-    t212_ticker: Optional[str] = None
-    t212_review_url: Optional[str] = None
     what_is_this: str = ""
     sell_trigger: Optional[str] = None
     suggested_amount: float
@@ -108,20 +105,9 @@ class TradeAlertResponse(BaseModel):
     created_at: datetime
 
 
-class ScanResponse(BaseModel):
-    status: str
-    user_balance: float
-    max_trade_amount: float
-    alert: Optional[TradeAlertResponse] = None
-    message: Optional[str] = None
-    budget_reached: bool = False
-    safety_flags: list[str] = Field(default_factory=list)
-
-
 class HealthResponse(BaseModel):
     status: str
     claude_configured: bool
-    trading212_configured: bool
     mode: str
 
 

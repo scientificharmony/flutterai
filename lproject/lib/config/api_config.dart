@@ -34,4 +34,6 @@ class ApiConfig {
   static final String forexPnlSummary       = "$baseUrl/forex/positions/pnl-summary";
   static final String cfdSummary            = "$baseUrl/cfd/summary";
   static final String cfdScan               = "$baseUrl/cfd/scan";
+  static String forexChart(String pair, String interval) =>
+      '$baseUrl/forex/chart?pair=${Uri.encodeComponent(pair)}&interval=$interval';
 }

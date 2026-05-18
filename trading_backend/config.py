@@ -5,9 +5,6 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env")
 
     anthropic_api_key: str = ""
-    t212_api_key: str = ""
-    t212_secret: str | None = None
-    t212_env: str = "demo"
     claude_model: str = "claude-3-5-sonnet-20241022"
     claude_max_tokens: int = 550
     claude_max_candidates: int = 3
@@ -62,18 +59,7 @@ class Settings(BaseSettings):
         return self.app_mode == "private_test"
 
     @property
-    def t212_base_url(self) -> str:
-        return "https://live.trading212.com/api/v0" if self.t212_env.lower() == "live" else "https://demo.trading212.com/api/v0"
-
-    # Uppercase aliases for backward compatibility
-    @property
     def ANTHROPIC_API_KEY(self) -> str: return self.anthropic_api_key
-    @property
-    def T212_API_KEY(self) -> str: return self.t212_api_key
-    @property
-    def T212_SECRET(self) -> str | None: return self.t212_secret
-    @property
-    def T212_ENV(self) -> str: return self.t212_env
     @property
     def CLAUDE_MODEL(self) -> str: return self.claude_model
     @property
