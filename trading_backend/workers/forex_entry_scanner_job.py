@@ -38,18 +38,32 @@ async def run_forex_entry_scanner() -> None:
             users = [User(device_id=settings.TEST_USER_ID, plan="pro")]
 
         summary = get_forex_summary(timeframe="15m", pairs=DEFAULT_FOREX_PAIRS)
-        actionable = [
-            signal for signal in summary.signals
-            if signal.direction in {"LONG", "SHORT"} and signal.strength >= settings.FOREX_MIN_SIGNAL_STRENGTH
-        ]
+        _MIN_RR = 2.0
+        actionable = []
+        for signal in summary.signals:
+            if signal.direction not in {"LONG", "SHORT"}:
+                continue
+            if signal.strength < settings.FOREX_MIN_SIGNAL_STRENGTH:
+                continue
+            stop_dist = abs(signal.entry - signal.stop_loss)
+            tp_dist = abs(signal.take_profit - signal.entry)
+            if stop_dist <= 0 or (tp_dist / stop_dist) < _MIN_RR:
+                logger.info(
+                    "Forex entry scanner: filtered poor R:R | pair=%s | rr=%.2f",
+                    signal.pair, tp_dist / stop_dist if stop_dist > 0 else 0,
+                )
+                continue
+            actionable.append(signal)
 
         if not actionable:
-            logger.info("Forex entry scanner: no actionable signals.")
+            logger.info("Forex entry scanner: no actionable signals after R:R filter.")
             return
 
         logger.info(
-            "Forex entry scanner: %d actionable signals | top=%s %s strength=%s provider=%s",
-            len(actionable), actionable[0].pair, actionable[0].direction, actionable[0].strength, summary.provider,
+            "Forex entry scanner: %d actionable signals | top=%s %s strength=%s rr=%.2f provider=%s",
+            len(actionable), actionable[0].pair, actionable[0].direction, actionable[0].strength,
+            abs(actionable[0].take_profit - actionable[0].entry) / abs(actionable[0].entry - actionable[0].stop_loss),
+            summary.provider,
         )
 
         for user in users:
