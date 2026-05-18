@@ -5467,3 +5467,52 @@ ssh hey-jimmy "cd ~/flutterai/flutterai && git pull --ff-only origin master && s
 ```
 
 Server confirmed healthy at `1da761a`.
+
+---
+
+## Session: 2026-05-18 — Live trading setup, risk config, and app cleanup
+
+### Trade size and risk
+- `FOREX_IG_SIZE` raised from `0.1` to `1` — IG live minimum deal size for major pairs
+- `FOREX_RISK_BPS` raised from `50` to `2500` — reflects realistic ~£125 risk per trade at size 1 on £500 balance
+- Risk slider removed from Forex Lab UI (`forex_lab_screen.dart`) — no longer valid with fixed lot size
+- At size 1 on EUR/USD: pip value ~£7.50, typical TP ~30-35 pips = ~£225-262 profit, stop ~15 pips = ~£112 loss
+- Balance growth unlocks more concurrent positions: ~£350 margin per trade, so each ~£350 profit adds one slot
+
+### Pair universe restricted to 8 core majors
+Removed all exotic, EM, Scandinavian, and cross pairs. Scan universe is now:
+`EUR/USD, GBP/USD, USD/JPY, USD/CHF, USD/CAD, AUD/USD, NZD/USD, EUR/GBP`
+All confirmed 200 OK on live IG account. Tightest spreads, most liquid, cleanest signals.
+
+### 2:1 R:R filter added
+`forex_entry_scanner_job.py` now filters out any signal where `target < 2 × stop distance` before pushing.
+Signals with R:R ~1.33 (current market conditions) are dropped. Filter logs: `filtered poor R:R | pair=X | rr=1.33`.
+Existing strength threshold (72+) and cooldown unchanged.
+
+### Push notification title updated
+Format changed from `Forex setup: EUR/USD SHORT` to `EUR/USD SHORT — 78/100` so score is visible in notification shade before tapping.
+
+### Flutter app — zero analyzer warnings
+Fixed all 17 issues:
+- Deleted orphaned T212 screens: `pie_result_screen.dart`, `pie_builder_screen.dart`, `pie_history_screen.dart`
+- Removed unused `home_screen.dart` import from `main.dart`
+- Removed dead `_Stat` and `_Section` classes from `alert_detail_screen.dart`
+- Fixed local variable underscore warnings in `forex_lab_screen.dart`
+- Added missing `const` in `fcm_service.dart`
+- Release APK rebuilt and installed to Samsung S25 Ultra
+
+### Git commits this session
+| Hash | Message |
+|------|---------|
+| `1da761a` | fix: skip IG close-sync for positions opened within 60s |
+| `7c31f4e` | docs: update chatgpt.md with 2026-05-18 session notes |
+| `3e7d79d` | fix: remove risk % slider — fixed lot size makes it invalid |
+| `af7b815` | fix: show strength score in push notification title |
+| `744812a` | feat: filter forex entry alerts below 2:1 risk:reward |
+| `3c721f5` | feat: restrict scan universe to 8 core major pairs |
+| `30a982a` | fix: resolve all flutter analyze warnings and remove orphaned T212 screens |
+
+### Current scanner state (14:00 UTC)
+- Scanner running every 15 min, R:R filter blocking all current signals (~1.33)
+- London/New York overlap active until ~17:00 UTC — best window for 2:1 setups
+- Next good window if nothing fires today: London open ~08:00 UTC tomorrow
