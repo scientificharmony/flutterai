@@ -40,16 +40,35 @@ class AITradingApp extends StatefulWidget {
   State<AITradingApp> createState() => _AITradingAppState();
 }
 
-class _AITradingAppState extends State<AITradingApp> {
+class _AITradingAppState extends State<AITradingApp> with WidgetsBindingObserver {
   final _navigatorKey = GlobalKey<NavigatorState>();
   Map<String, dynamic>? _pendingNotificationTap;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (AppStartupConfig.enableFirebase) {
       _initFcm();
     }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && AppStartupConfig.enableFirebase) {
+      _checkInitialMessage();
+    }
+  }
+
+  Future<void> _checkInitialMessage() async {
+    final message = await FcmService.instance.messaging.getInitialMessage();
+    if (message != null) _handleNotificationTap(message.data);
   }
 
   void _initFcm() {
@@ -106,7 +125,7 @@ class _AITradingAppState extends State<AITradingApp> {
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
       navigatorObservers: [routeObserver],
-      home: const HomeScreen(),
+      home: const ForexLabScreen(),
     );
   }
 }

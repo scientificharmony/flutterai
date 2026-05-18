@@ -1,5 +1,6 @@
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from time import monotonic
 
 import httpx
@@ -58,6 +59,8 @@ DEFAULT_FOREX_PAIRS = [
     "EUR/SEK",
     "EUR/NOK",
     "EUR/DKK",
+    "XAU/USD",
+    "XAG/USD",
 ]
 
 
@@ -82,6 +85,8 @@ _MOCK_PRICES = {
     "AUD/NZD": 1.0860,
     "EUR/CAD": 1.4860,
     "GBP/CAD": 1.7440,
+    "XAU/USD": 3300.0,
+    "XAG/USD": 33.0,
 }
 
 IG_DEMO_BASE_URL = "https://demo-api.ig.com/gateway/deal"
@@ -167,7 +172,7 @@ def get_ig_live_balance() -> float:
                 return value
     except Exception as exc:
         logger.warning("IG live balance fetch failed, using env var fallback: %s", exc)
-    return settings.FOREX_DEMO_BALANCE
+    return settings.FOREX_ACCOUNT_BALANCE
 _SNAPSHOT_CACHE_SECONDS = 60.0
 
 
@@ -183,7 +188,62 @@ def risk_amount(balance: float | None = None) -> float:
 
 
 def _pip_size(pair: str) -> float:
+    if pair == "XAU/USD":
+        return 0.1
+    if pair == "XAG/USD":
+        return 0.01
     return 0.01 if pair.endswith("/JPY") else 0.0001
+
+
+_SESSION_PAIRS: dict[str, list[str]] = {
+    # Asia session: 00:00–09:00 UTC
+    "asia": ["USD/JPY", "AUD/USD", "NZD/USD", "AUD/JPY", "NZD/JPY", "AUD/NZD", "USD/SGD", "USD/HKD", "USD/CNH", "AUD/CAD", "AUD/CHF", "NZD/CAD", "NZD/CHF"],
+    # London session: 07:00–16:00 UTC
+    "london": ["EUR/USD", "GBP/USD", "EUR/GBP", "USD/CHF", "EUR/CHF", "GBP/CHF", "EUR/AUD", "GBP/AUD", "EUR/CAD", "GBP/CAD", "GBP/NZD", "EUR/NZD", "EUR/JPY", "GBP/JPY", "CHF/JPY", "CAD/JPY", "USD/NOK", "USD/SEK", "USD/DKK", "EUR/PLN", "EUR/HUF", "EUR/CZK", "EUR/SEK", "EUR/NOK", "EUR/DKK", "USD/PLN", "USD/HUF", "USD/CZK"],
+    # New York session: 13:00–22:00 UTC
+    "new_york": ["EUR/USD", "GBP/USD", "USD/JPY", "USD/CAD", "USD/CHF", "AUD/USD", "NZD/USD", "USD/MXN", "USD/ZAR", "USD/TRY", "XAU/USD", "XAG/USD"],
+    # London + NY overlap (also active in London): commodities
+    "london_commodity": ["XAU/USD", "XAG/USD"],
+}
+
+
+def _session_bonus(pair: str) -> int:
+    """Return +10 if pair is in its primary trading session, -10 if in a dead session."""
+    hour = datetime.now(timezone.utc).hour
+    active_sessions = []
+    if 0 <= hour < 9:
+        active_sessions.append("asia")
+    if 7 <= hour < 16:
+        active_sessions.append("london")
+        active_sessions.append("london_commodity")
+    if 13 <= hour < 22:
+        active_sessions.append("new_york")
+
+    if not active_sessions:
+        return -10
+
+    for session in active_sessions:
+        if pair in _SESSION_PAIRS.get(session, []):
+            return 10
+    return -10
+
+
+def _higher_tf_confluence(pair: str, direction: str) -> int:
+    """Return +10 if the 1h trend agrees with direction, 0 if neutral, -10 if opposing."""
+    try:
+        data = get_forex_ohlcv(pair, period="60d", interval="1h")
+        if data is None or len(data.df) < 50:
+            return 0
+        df = compute_all(data.df)
+        last = df.iloc[-1]
+        sma20 = last.get("SMA20")
+        sma50 = last.get("SMA50")
+        if pd.isna(sma20) or pd.isna(sma50):
+            return 0
+        h_direction = "LONG" if float(sma20) > float(sma50) else "SHORT"
+        return 10 if h_direction == direction else -10
+    except Exception:
+        return 0
 
 
 def _fallback_strength(pair: str, timeframe: str) -> int:
@@ -265,7 +325,11 @@ def _real_signal(pair: str) -> tuple[int, str]:
                 elif 0.3 <= ratio < 0.5 or 2.0 < ratio <= 3.0:
                     atr_score = 5.0
 
-    strength = int(round(min(100.0, max(0.0, trend_score + rsi_score + price_score + atr_score))))
+    session_bonus = _session_bonus(pair)
+    htf_bonus = _higher_tf_confluence(pair, direction)
+
+    raw = trend_score + rsi_score + price_score + atr_score + session_bonus + htf_bonus
+    strength = int(round(min(100.0, max(0.0, raw))))
     if strength < settings.FOREX_MIN_SIGNAL_STRENGTH:
         direction = "NO_TRADE"
 
@@ -533,8 +597,6 @@ def place_ig_demo_position(
     stop_level: float,
     limit_level: float,
 ) -> IgPlacedPosition:
-    if settings.IG_ACCOUNT_TYPE.upper() != "DEMO":
-        raise RuntimeError("IG forex execution is only allowed for DEMO accounts")
     if size <= 0:
         raise RuntimeError("IG forex execution size must be greater than zero")
 
@@ -584,6 +646,8 @@ def place_ig_demo_position(
                     raise RuntimeError(f"IG rejected the trade: {reason}")
                 deal_id = confirm_data.get("dealId") or ""
                 break
+            except RuntimeError:
+                raise
             except Exception as exc:
                 if attempt == 3:
                     logger.warning("IG demo deal confirm failed for %s: %s", deal_reference, exc)
@@ -610,8 +674,6 @@ def place_ig_demo_position(
 
 
 def close_ig_position(deal_id: str, direction: str, size: float) -> str:
-    if settings.IG_ACCOUNT_TYPE.upper() != "DEMO":
-        raise RuntimeError("IG auto-close is only allowed for DEMO accounts")
     session = _get_ig_session()
     response = httpx.request(
         "DELETE",

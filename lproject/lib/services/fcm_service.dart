@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebasemessaging/firebasemessaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
@@ -15,7 +15,7 @@ class FcmService {
   FcmService._();
   static final FcmService instance = FcmService._();
 
-  final _messaging = FirebaseMessaging.instance;
+  final messaging = FirebaseMessaging.instance;
   final _localNotifications = FlutterLocalNotificationsPlugin();
 
   // Callback set by the app to navigate on notification tap
@@ -23,7 +23,7 @@ class FcmService {
 
   Future<void> init() async {
     // Request permission (iOS)
-    await _messaging.requestPermission(alert: true, badge: true, sound: true);
+    await messaging.requestPermission(alert: true, badge: true, sound: true);
 
     // Local notifications channel (Android)
     const androidChannel = AndroidNotificationChannel(
@@ -80,16 +80,16 @@ class FcmService {
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
       onNotificationTap?.call(message.data);
     });
-    final initialMessage = await _messaging.getInitialMessage();
+    final initialMessage = await messaging.getInitialMessage();
     if (initialMessage != null) {
       onNotificationTap?.call(initialMessage.data);
     }
 
     // Register token with backend
-    final token = await _messaging.getToken();
+    final token = await messaging.getToken();
     if (token != null) await _registerToken(token);
 
-    _messaging.onTokenRefresh.listen(_registerToken);
+    messaging.onTokenRefresh.listen(_registerToken);
   }
 
   Future<void> _registerToken(String token) async {

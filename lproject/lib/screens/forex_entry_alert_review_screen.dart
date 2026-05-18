@@ -87,7 +87,7 @@ class _ForexEntryAlertReviewScreenState extends State<ForexEntryAlertReviewScree
       // One-tap execute uses the "custom" endpoint so we can keep a consistent
       // request shape and later allow edits without adding new endpoint.
       final body = {
-        'size': 0.5,
+        'size': 0.1,
         'stop_loss': _alert!.stopLoss,
         'take_profit': _alert!.takeProfit,
       };
