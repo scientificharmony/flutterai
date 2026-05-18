@@ -70,7 +70,7 @@ def provider_connected() -> bool:
 
 
 def risk_amount() -> float:
-    return round(settings.FOREX_DEMO_BALANCE * (settings.FOREX_RISK_BPS / 10000), 2)
+    return round(settings.FOREX_ACCOUNT_BALANCE * (settings.FOREX_RISK_BPS / 10000), 2)
 
 
 def _mock_snapshot(market: str) -> CfdMarketSnapshot:
@@ -269,7 +269,7 @@ def get_cfd_summary(timeframe: str = "15m", markets: list[str] | None = None) ->
         provider=settings.FOREX_PROVIDER,
         connected=provider_connected(),
         account_type=settings.IG_ACCOUNT_TYPE if settings.FOREX_PROVIDER.lower() == "ig" else "MOCK",
-        demo_balance=settings.FOREX_DEMO_BALANCE,
+        demo_balance=settings.FOREX_ACCOUNT_BALANCE,
         risk_bps=settings.FOREX_RISK_BPS,
         risk_amount=risk_amount(),
         min_signal_strength=settings.FOREX_MIN_SIGNAL_STRENGTH,

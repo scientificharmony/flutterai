@@ -5273,3 +5273,118 @@ Auto-close bugfix:
 ### Trading212 ticker validation note
 Some clean tickers in the default watchlists (e.g. certain ETFs) may not appear as unique symbols in Trading212's instrument metadata feed. For scan/push purposes we allow a small fallback mapping so these are not dropped as `UNKNOWN` validation failures. This does not enable any order execution.
 
+
+
+---
+
+## Session: May 2026 — Live IG Account, Forex-Only App, Candlestick Charts
+
+### Overview
+App transitioned from Trading212 demo + ETF/stock scanning to a fully forex-focused live trading assistant powered by IG live CFD account. All T212/ETF/Pie Builder code removed. App is now lean and forex-only.
+
+---
+
+### Live IG Account Setup
+- Switched from IG demo (`demo-api.ig.com`) to live (`api.ig.com`)
+- `.env` updated: `IG_ACCOUNT_TYPE=CFD`, live API key, username (`scientificharmony@gmail.com`), password
+- IG session login returns HTTP 200 on live endpoint
+- `GET /accounts` returns 403 on live — balance falls back to `FOREX_ACCOUNT_BALANCE` env var
+- Many pairs (JPY crosses, exotic pairs) return 403 on live market snapshots — these are skipped gracefully
+- Core majors (EUR/USD, GBP/USD, USD/CHF, etc.) return 200 and are scanned normally
+
+### Demo Guards Removed
+All code that blocked execution on live account was removed:
+- `routers/forex.py` — removed `if IG_ACCOUNT_TYPE != DEMO: raise 403` on both execute endpoints
+- `forex_service.py` — removed demo-only guard from `place_ig_demo_position()` and `close_ig_position()`
+- `forex_position_monitor_job.py` — removed demo-only guard from `_should_auto_close()`
+
+### Config Renames
+- `FOREX_DEMO_BALANCE` → `FOREX_ACCOUNT_BALANCE` (env key and config property)
+- `FOREX_IG_DEMO_SIZE` → `FOREX_IG_SIZE` (env key and config property)
+- `T212_API_KEY`, `T212_SECRET`, `T212_ENV` removed from config entirely
+
+### Account Details
+- Live IG CFD account, £200 initial deposit
+- `FOREX_ACCOUNT_BALANCE=200` in `.env` (fallback for trade sizing while /accounts returns 403)
+- `FOREX_IG_SIZE=0.1` (lot size per trade)
+- `FOREX_RISK_BPS=50` (0.5% risk per trade = ~£1 per trade at £200 balance)
+
+---
+
+### Forex-Only App Refactor
+All Trading212, ETF scanner, Pie Builder, and Holdings code removed.
+
+**Backend deleted:**
+- `services/trading212_service.py`
+- `routers/scan.py`, `routers/pie.py`, `routers/holdings.py`
+- `models/pie_schemas.py`
+- `workers/scanner_job.py`, `workers/holding_tracker_job.py`, `workers/pie_monitor_job.py`
+- 6 related test files
+
+**Backend updated:**
+- `config.py` — removed all `t212_*` fields and `t212_base_url` property
+- `models/db_models.py` — removed `trading212_review_enabled` field from `TradeAlert`, removed `SavedPie` and `PieUsage` classes (orphaned DB tables left harmless)
+- `models/schemas.py` — removed `trading212_review_enabled`, `t212_ticker`, `t212_review_url` from `TradeAlertResponse`; removed `ScanResponse`; removed `trading212_configured` from `HealthResponse`
+- `routers/alerts.py` — removed T212 ticker lookup from `_to_response()`
+- `routers/health.py` — simplified, returns only `status`, `claude_configured`, `mode`
+- `workers/scheduler.py` — removed `market_scan`, `pie_monitor`, `holding_tracker` jobs
+
+**Flutter deleted:**
+- `screens/holdings_screen.dart`, `screens/mission_screen.dart`
+- `screens/pie_builder_screen.dart`, `screens/pie_result_screen.dart`, `screens/pie_history_screen.dart`
+- `models/pie_model.dart`
+
+**Flutter updated:**
+- `models/alert_model.dart` — removed `trading212ReviewEnabled` and `t212ReviewUrl`
+- `screens/alert_detail_screen.dart` — removed `_openT212()`, T212 button, T212 step-by-step cards, `android_intent_plus` and `url_launcher` imports
+- `screens/home_screen.dart` — removed holdings/pie/mission imports and buttons; replaced dual FABs with single Forex Lab FAB
+- `pubspec.yaml` — removed `url_launcher`, `android_intent_plus`; added `candlesticks: ^2.1.0`
+
+---
+
+### Candlestick Chart Feature
+**Backend:** `GET /forex/chart?pair=EUR/USD&interval=1h`
+- Reuses existing `get_forex_ohlcv()` from `market_data.py` (5-min cache)
+- Supports intervals: `1h`, `4h` (resampled from 1h via pandas), `1d`
+- Returns `{pair, interval, bars: [{t, o, h, l, c, v}]}`
+- Added to `routers/forex.py`
+
+**Flutter:** `screens/forex_chart_screen.dart`
+- `Candlesticks` widget from `candlesticks` package
+- Interval selector (1h/4h/1d) in app bar via `ChoiceChip`
+- Timestamp parsing: Python `str(idx)` produces `"2024-01-15 09:00:00+00:00"` — space replaced with `T` before `DateTime.parse`
+- Accessible via candlestick icon in Forex Lab app bar → pair picker bottom sheet
+
+---
+
+### Forex Lab UI Updates
+- App home screen changed from `HomeScreen` to `ForexLabScreen`
+- All "practice" language replaced: "Practice signals" → "Signals", "Open practice trades" → "Open positions", "I took this practice trade" → "I took this trade", "Proceed with demo trade" → "Execute trade"
+- "Practice CFD mode" header → "Forex Lab"
+- DEMO badge → LIVE (green)
+- Status panel subtitle: "Forex Lab is still practice-only..." → "Live IG account connected. Trades execute on real account."
+- "Risk per practice trade" → "Risk per trade"
+
+---
+
+### System Architecture (Current State)
+- **Backend:** FastAPI on Linode (`172.237.116.65`), service: `flutterai-backend.service`
+- **Database:** SQLite at `~/flutterai/flutterai/trading_backend/hey_jimmy.db`
+- **Scheduler jobs:** `outcome_check` (1h), `forex_position_monitor` (5m), `forex_entry_scanner` (15m), `cfd_entry_scanner` (15m), `forex_friday_close` (15m)
+- **Broker:** IG live CFD account via `api.ig.com`
+- **Flutter:** Samsung S25 Ultra, built with `flutter build apk --release`, installed via `adb -s RFCY11HPMGW`
+
+### Trade Execution Flow
+1. Scanner fires every 15 min during market hours (Fri 22:00 – Sun 22:00 UTC skipped)
+2. Signal scoring: base technical score + session bonus (±10) + 1h HTF confluence (±10), threshold 72
+3. Push notification sent to device
+4. User taps notification → `ForexEntryAlertReviewScreen` → taps Execute
+5. Backend calls IG `POST /positions/otc` with market order
+6. Position stored in DB with `ig_deal_id`
+7. Monitor job checks every 5 min; auto-closes at TP or stop if `ENABLE_FOREX_AUTO_CLOSE=true`
+8. Friday close job (Fri 21:00-22:00 UTC) closes profitable positions before weekend
+
+### Plan for Next Week
+- This week: manual execution by user, backend monitors and auto-closes
+- If profitable: move to automated trade entry (remove manual tap step) with daily loss limit safety net
+- Goal: fully automated scan → entry → manage → close cycle

@@ -11,10 +11,7 @@ import '../theme/app_theme.dart';
 import 'alert_detail_screen.dart';
 import 'cfd_lab_screen.dart';
 import 'forex_lab_screen.dart';
-import 'holdings_screen.dart';
-import 'mission_screen.dart';
-import 'pie_builder_screen.dart';
-import 'pie_history_screen.dart';
+import 'forex_pnl_screen.dart';
 import 'private_dashboard_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -130,29 +127,20 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         IconButton(
           visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.bar_chart, size: 19),
+          tooltip: 'P&L Summary',
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const ForexPnlScreen()),
+          ),
+        ),
+        IconButton(
+          visualDensity: VisualDensity.compact,
           icon: const Icon(Icons.show_chart, size: 19),
           tooltip: 'CFD Lab',
           onPressed: () => Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const CfdLabScreen()),
-          ),
-        ),
-        IconButton(
-          visualDensity: VisualDensity.compact,
-          icon: const Icon(Icons.account_balance_wallet_outlined, size: 19),
-          tooltip: 'My Holdings',
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const HoldingsScreen()),
-          ),
-        ),
-        IconButton(
-          visualDensity: VisualDensity.compact,
-          icon: const Icon(Icons.pie_chart_outline, size: 19),
-          tooltip: 'Saved Pies',
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const PieHistoryScreen()),
           ),
         ),
         IconButton(
@@ -165,44 +153,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildFabs() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        FloatingActionButton.small(
-          heroTag: 'pie_fab',
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const PieBuilderScreen()),
-          ),
-          tooltip: 'Build a Pie',
-          backgroundColor: AppColors.surface,
-          foregroundColor: AppColors.cyan,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: const BorderSide(color: AppColors.cyan, width: 1),
-          ),
-          child: const Icon(Icons.pie_chart_outline, size: 18),
-        ),
-        const SizedBox(height: 10),
-        FloatingActionButton.extended(
-          heroTag: 'scan_fab',
-          onPressed: () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const MissionScreen()),
-            );
-            _loadAlerts();
-          },
-          icon: const Icon(Icons.search, size: 18),
-          label: Text('Scan Market',
-              style: GoogleFonts.dmSans(fontWeight: FontWeight.w600)),
-          backgroundColor: AppColors.orange,
-          foregroundColor: Colors.black,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          elevation: 6,
-        ),
-      ],
+    return FloatingActionButton(
+      heroTag: 'forex_fab',
+      onPressed: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ForexLabScreen()),
+      ),
+      tooltip: 'Forex Lab',
+      backgroundColor: AppColors.cyan,
+      foregroundColor: Colors.black,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: const Icon(Icons.currency_exchange, size: 22),
     );
   }
 

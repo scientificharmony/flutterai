@@ -129,7 +129,6 @@ def _check_position(pos: ForexPosition, session: Session) -> None:
 def _should_auto_close(pos: ForexPosition, status: str) -> bool:
     return (
         settings.ENABLE_FOREX_AUTO_CLOSE
-        and settings.IG_ACCOUNT_TYPE.upper() == "DEMO"
         and status in {"TAKE_PROFIT", "CUT_LOSS"}
         and pos.ig_deal_id is not None
         and pos.ig_size is not None

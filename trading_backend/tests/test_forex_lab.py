@@ -619,7 +619,7 @@ def test_execute_forex_entry_alert_places_ig_demo_trade(client, db_engine, monke
 
     monkeypatch.setattr(forex.settings, "forex_provider", "ig")
     monkeypatch.setattr(forex.settings, "ig_account_type", "DEMO")
-    monkeypatch.setattr(forex.settings, "forex_ig_demo_size", 0.5)
+    monkeypatch.setattr(forex.settings, "forex_ig_size", 0.5)
     monkeypatch.setattr(forex.settings, "forex_execution_max_slippage_pips", 15)
     monkeypatch.setattr(forex, "get_forex_mid_price", lambda pair: 1.05596)
     placed = []
@@ -867,7 +867,7 @@ def test_execute_forex_entry_alert_falls_back_to_open_position_when_confirm_miss
 
     monkeypatch.setattr(forex.settings, "forex_provider", "ig")
     monkeypatch.setattr(forex.settings, "ig_account_type", "DEMO")
-    monkeypatch.setattr(forex.settings, "forex_ig_demo_size", 0.5)
+    monkeypatch.setattr(forex.settings, "forex_ig_size", 0.5)
     monkeypatch.setattr(forex.settings, "forex_execution_max_slippage_pips", 15)
     monkeypatch.setattr(forex, "get_forex_mid_price", lambda pair: 1.05596)
     monkeypatch.setattr(

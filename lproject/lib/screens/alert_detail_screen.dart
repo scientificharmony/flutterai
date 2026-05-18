@@ -1,10 +1,8 @@
 import 'dart:convert';
-import 'package:android_intent_plus/android_intent.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../config/api_config.dart';
 import '../models/alert_model.dart';
 import '../services/device_service.dart';
@@ -60,34 +58,6 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
       setState(() => _error = 'Connection failed.');
     } finally {
       setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _openT212(TradeAlert alert) async {
-    await Clipboard.setData(ClipboardData(text: alert.ticker));
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${alert.ticker} copied — paste in T212 search'),
-          duration: const Duration(seconds: 4),
-        ),
-      );
-    }
-    const package = 'com.avuscapital.trading212';
-    final intent = AndroidIntent(
-      action: 'android.intent.action.MAIN',
-      package: package,
-      componentName: 'com.avuscapital.trading212.MainActivity',
-      flags: const <int>[0x10000000], // FLAG_ACTIVITY_NEW_TASK
-    );
-    try {
-      await intent.launch();
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open Trading 212')),
-        );
-      }
     }
   }
 
@@ -215,7 +185,6 @@ Risk Note:        ${alert.riskNote}
     return _AlertDetail(
       alert: _alert!,
       outcome: _outcome,
-      onOpenT212: () => _openT212(_alert!),
       onCopy: () => _copyOrderDetails(_alert!),
       onTookTrade: _showTookTradeDialog,
       onIgnored: () => _recordOutcome('ignored'),
@@ -230,7 +199,6 @@ Risk Note:        ${alert.riskNote}
 class _AlertDetail extends StatefulWidget {
   final TradeAlert alert;
   final SignalOutcome? outcome;
-  final VoidCallback onOpenT212;
   final VoidCallback onCopy;
   final VoidCallback onTookTrade;
   final VoidCallback onIgnored;
@@ -240,7 +208,6 @@ class _AlertDetail extends StatefulWidget {
   const _AlertDetail({
     required this.alert,
     required this.outcome,
-    required this.onOpenT212,
     required this.onCopy,
     required this.onTookTrade,
     required this.onIgnored,
@@ -260,12 +227,6 @@ class _AlertDetailState extends State<_AlertDetail> {
     final alert = widget.alert;
     final outcome = widget.outcome;
     final expired = alert.isExpired;
-    final isBuy = alert.action == 'BUY_REVIEW';
-    final isSell = alert.action == 'REVIEW_SELL';
-    final canExecute = alert.trading212ReviewEnabled &&
-        alert.actionStrength >= 70 &&
-        (isBuy || isSell) &&
-        !expired;
 
     final strengthColor = alert.actionStrength >= 80
         ? Colors.green
@@ -381,18 +342,6 @@ class _AlertDetailState extends State<_AlertDetail> {
           ),
 
           const SizedBox(height: 8),
-
-          // ── Step-by-step (buy alerts only) ───────────────────────────────
-          if (canExecute && isBuy) ...[
-            _StepsCard(ticker: alert.ticker, amount: alert.suggestedAmount),
-            const SizedBox(height: 8),
-          ],
-
-          // ── Step-by-step (sell alerts) ───────────────────────────────────
-          if (canExecute && isSell) ...[
-            _SellStepsCard(ticker: alert.ticker),
-            const SizedBox(height: 8),
-          ],
 
           // ── Key factors ──────────────────────────────────────────────────
           if (alert.keyFactors.isNotEmpty) ...[
@@ -514,36 +463,6 @@ class _AlertDetailState extends State<_AlertDetail> {
             icon: const Icon(Icons.copy, size: 16),
             label: const Text('Copy details'),
           ),
-
-          const SizedBox(height: 10),
-
-          ElevatedButton.icon(
-            onPressed: canExecute ? widget.onOpenT212 : null,
-            icon: Icon(isSell ? Icons.trending_down : Icons.open_in_new),
-            label: Text(isSell ? 'Review Sell in Trading 212' : 'Open in Trading 212 to Buy'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: isSell ? Colors.red : Colors.green,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              disabledBackgroundColor: Colors.grey[300],
-              textStyle: const TextStyle(
-                  fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-          ),
-
-          if (!canExecute)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                expired
-                    ? 'This alert has expired.'
-                    : alert.action == 'WATCH'
-                        ? 'Not strong enough to act on yet — watch for now.'
-                        : 'Not available — safety checks did not pass.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey[500], fontSize: 12),
-              ),
-            ),
 
           const SizedBox(height: 8),
           const Text(
@@ -1018,145 +937,6 @@ class _StatPill extends StatelessWidget {
             TextSpan(text: value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _StepsCard extends StatelessWidget {
-  final String ticker;
-  final double amount;
-  const _StepsCard({required this.ticker, required this.amount});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: Colors.green[50],
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.checklist, color: Colors.green, size: 18),
-                SizedBox(width: 6),
-                Text('How to act on this',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green,
-                        fontSize: 13)),
-              ],
-            ),
-            const SizedBox(height: 10),
-            _Step('1', 'Tap the green button below to open Trading 212'),
-            _Step('2', 'Search for "$ticker" in Trading 212'),
-            _Step('3', 'Look at the chart — does the price look reasonable to you?'),
-            _Step('4', 'If yes, tap Buy and enter up to £${amount.toStringAsFixed(0)}'),
-            _Step('5', 'Come back here and tap "I took this trade" so we can track it'),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SellStepsCard extends StatelessWidget {
-  final String ticker;
-  const _SellStepsCard({required this.ticker});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: Colors.red[50],
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.checklist, color: Colors.red, size: 18),
-                SizedBox(width: 6),
-                Text('How to act on this',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.red,
-                        fontSize: 13)),
-              ],
-            ),
-            const SizedBox(height: 10),
-            _SellStep('1', 'Tap the red button below to open Trading 212'),
-            _SellStep('2', 'Find your "$ticker" position in your portfolio'),
-            _SellStep('3', 'Review your current profit or loss'),
-            _SellStep('4', 'If you agree with the signal, tap Sell'),
-            _SellStep('5', 'Come back here and tap "Close trade" to record your result'),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SellStep extends StatelessWidget {
-  final String number;
-  final String text;
-  const _SellStep(this.number, this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 20,
-            height: 20,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              color: Colors.red,
-              shape: BoxShape.circle,
-            ),
-            child: Text(number,
-                style: const TextStyle(
-                    color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-          ),
-          const SizedBox(width: 8),
-          Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
-        ],
-      ),
-    );
-  }
-}
-
-class _Step extends StatelessWidget {
-  final String number;
-  final String text;
-  const _Step(this.number, this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 20,
-            height: 20,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              color: Colors.green,
-              shape: BoxShape.circle,
-            ),
-            child: Text(number,
-                style: const TextStyle(
-                    color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-          ),
-          const SizedBox(width: 8),
-          Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
-        ],
       ),
     );
   }

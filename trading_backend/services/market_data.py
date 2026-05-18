@@ -117,8 +117,16 @@ _forex_cache: dict[str, tuple[float, pd.DataFrame]] = {}
 _FOREX_CACHE_TTL_SECONDS = 300  # 5 minutes
 
 
+_CUSTOM_YF_TICKERS: dict[str, str] = {
+    "XAU/USD": "GC=F",
+    "XAG/USD": "SI=F",
+}
+
+
 def _pair_to_yf_ticker(pair: str) -> str:
-    """Convert EUR/USD → EURUSD=X for yfinance."""
+    """Convert EUR/USD → EURUSD=X for yfinance. Custom overrides for commodities."""
+    if pair in _CUSTOM_YF_TICKERS:
+        return _CUSTOM_YF_TICKERS[pair]
     return pair.replace("/", "") + "=X"
 
 

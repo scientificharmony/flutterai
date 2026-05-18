@@ -67,7 +67,6 @@ class TradeAlert(SQLModel, table=True):
     action_label: str = Field(default="Ignore")
     score_interpretation: str = Field(default="")
     action_strength_disclaimer: str = Field(default="")
-    trading212_review_enabled: bool = Field(default=False)
     suggested_amount: float
     price_at_alert: float
     alert_title: str
@@ -117,36 +116,6 @@ class DeviceToken(SQLModel, table=True):
     token: str = Field(unique=True)
     platform: str  # ios | android
     created_at: datetime = Field(default_factory=_utcnow)
-
-
-# ── Pie Builder tables ────────────────────────────────────────────────────────
-
-class SavedPie(SQLModel, table=True):
-    __tablename__ = "saved_pies"
-
-    id: str = Field(default_factory=_uid, primary_key=True)
-    user_id: str = Field(foreign_key="users.id", index=True)
-    pie_name: str
-    goal: str
-    risk_level: str
-    total_amount: float
-    time_horizon: str
-    slices: list = Field(default_factory=list, sa_column=Column(JSON))
-    overall_rationale: str
-    risk_note: str
-    monitoring_enabled: bool = Field(default=False)
-    last_monitored_at: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=_utcnow)
-
-
-class PieUsage(SQLModel, table=True):
-    __tablename__ = "pie_usage"
-
-    id: str = Field(default_factory=_uid, primary_key=True)
-    user_id: str = Field(foreign_key="users.id", index=True)
-    date: str = Field(index=True)  # YYYY-MM-DD
-    build_count: int = Field(default=0)
-    estimated_cost_usd: float = Field(default=0.0)
 
 
 # ── Private test mode tables ──────────────────────────────────────────────────
