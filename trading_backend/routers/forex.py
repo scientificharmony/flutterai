@@ -179,7 +179,7 @@ def execute_forex_entry_alert_demo(
     placed = place_ig_demo_position(
         pair=alert.pair,
         direction=alert.direction,
-        size=settings.FOREX_IG_DEMO_SIZE,
+        size=settings.FOREX_IG_SIZE,
         stop_level=alert.stop_loss,
         limit_level=alert.take_profit,
     )
