@@ -116,11 +116,11 @@ def _maybe_alert_user(user: User, signal, session: Session) -> None:
     if not tokens:
         return
 
-    title = f"Forex setup: {signal.pair} {signal.direction}"
+    title = f"{signal.pair} {signal.direction} — {signal.strength}/100"
     body = (
-        f"Strength {signal.strength}/100. Entry {signal.entry:.5f}, "
+        f"Entry {signal.entry:.5f}, "
         f"stop {signal.stop_loss:.5f}, target {signal.take_profit:.5f}. "
-        "Tap to review and place in IG demo."
+        "Tap to review and place in IG."
     )
     sent = send_to_user_devices(
         [token.token for token in tokens],
