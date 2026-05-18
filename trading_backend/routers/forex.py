@@ -146,8 +146,6 @@ def execute_forex_entry_alert_demo(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    if settings.IG_ACCOUNT_TYPE.upper() != "DEMO":
-        raise HTTPException(status_code=403, detail="Forex execution is only enabled for IG DEMO accounts.")
     if settings.FOREX_PROVIDER.lower() != "ig":
         raise HTTPException(status_code=422, detail="IG forex provider is not configured.")
 
@@ -223,8 +221,6 @@ def execute_forex_entry_alert_demo_custom(
 ):
     logger.info("FOREX EXECUTE START | user=%s | alert=%s", user.id, alert_id)
 
-    if settings.IG_ACCOUNT_TYPE.upper() != "DEMO":
-        raise HTTPException(status_code=403, detail="Forex execution is only enabled for IG DEMO accounts.")
     if settings.FOREX_PROVIDER.lower() != "ig":
         raise HTTPException(status_code=422, detail="IG forex provider is not configured.")
 

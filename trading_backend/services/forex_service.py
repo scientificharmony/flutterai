@@ -597,8 +597,6 @@ def place_ig_demo_position(
     stop_level: float,
     limit_level: float,
 ) -> IgPlacedPosition:
-    if settings.IG_ACCOUNT_TYPE.upper() != "DEMO":
-        raise RuntimeError("IG forex execution is only allowed for DEMO accounts")
     if size <= 0:
         raise RuntimeError("IG forex execution size must be greater than zero")
 
@@ -674,8 +672,6 @@ def place_ig_demo_position(
 
 
 def close_ig_position(deal_id: str, direction: str, size: float) -> str:
-    if settings.IG_ACCOUNT_TYPE.upper() != "DEMO":
-        raise RuntimeError("IG auto-close is only allowed for DEMO accounts")
     session = _get_ig_session()
     response = httpx.request(
         "DELETE",
