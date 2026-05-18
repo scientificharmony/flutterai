@@ -173,7 +173,7 @@ def get_ig_live_balance() -> float:
     except Exception as exc:
         logger.warning("IG live balance fetch failed, using env var fallback: %s", exc)
     return settings.FOREX_ACCOUNT_BALANCE
-_SNAPSHOT_CACHE_SECONDS = 60.0
+_SNAPSHOT_CACHE_SECONDS = 300.0
 
 
 def provider_connected() -> bool:
@@ -448,6 +448,16 @@ def _ig_snapshot(pair: str, session: IgSession) -> ForexMarketSnapshot | None:
         headers=_ig_headers(version="3", session=session),
         timeout=12.0,
     )
+    if response.status_code in (401, 403):
+        # Session expired mid-batch — force re-auth and retry once
+        global _ig_session
+        _ig_session = None
+        session = _get_ig_session()
+        response = httpx.get(
+            f"{_ig_base_url()}/markets/{epic}",
+            headers=_ig_headers(version="3", session=session),
+            timeout=12.0,
+        )
     response.raise_for_status()
     data = response.json()
     snapshot = data.get("snapshot", {})
