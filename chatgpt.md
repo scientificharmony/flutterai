@@ -5412,3 +5412,58 @@ All Trading212, ETF scanner, Pie Builder, and Holdings code removed.
 - IG live account funded to £500
 - Samsung battery optimisation set to Unrestricted (FCM now delivers reliably)
 - APK rebuilt and installed: `flutter build apk --debug --dart-define=ENABLE_FIREBASE=true`
+
+---
+
+## Session: 2026-05-18 — SSH access, instant-close race condition fix, cleanup
+
+### SSH key setup
+
+Generated an ed25519 key pair on the Windows dev machine (`~/.ssh/hey_jimmy`) and added the public key to `tradingbot@172.237.116.65:~/.ssh/authorized_keys`. SSH config alias `hey-jimmy` created pointing to `tradingbot@172.237.116.65` with the key. Claude Code can now SSH to the server directly in all future sessions.
+
+### Passwordless sudo for service restart
+
+Added `/etc/sudoers.d/tradingbot` (as root) granting `tradingbot` passwordless `sudo` for:
+- `systemctl restart flutterai-backend.service`
+- `systemctl start flutterai-backend.service`
+- `systemctl stop flutterai-backend.service`
+- `systemctl status flutterai-backend.service`
+
+Claude Code can now deploy and restart the backend without user interaction.
+
+### Local/server sync
+
+- Local was 3 commits behind origin/master (`e3ffc82`, `d8d1722`, `f7416a9`). Pulled and fast-forwarded.
+- Local `fcm_service.dart` had an identical change to `d8d1722` — discarded and pulled cleanly.
+- Junk files (`cd`, `git`, `sudo`, `FETCH_HEAD`) left in `~/flutterai/flutterai/` from previous manual shell commands — deleted.
+- Server was already at `e3ffc82` (origin/master at the time) and clean.
+
+### Bug fix — trades instantly closing with pnl=0
+
+**Root cause:** Every call to `GET /forex/positions` runs `_sync_closed_ig_positions()`, which fetches live IG open positions and marks any Hey Jimmy position whose `ig_deal_id` is absent from IG's feed as `closed`. When the user taps Execute, the backend places the IG trade, saves the `ForexPosition` row, and returns. The app immediately calls `GET /forex/positions` (within ~400ms). At that point IG's `/positions` feed had not yet propagated the new deal, so the new position was immediately marked `closed` with `realised_pnl=0.0`. This affected every single trade opened today.
+
+**Fix:** `trading_backend/routers/forex_positions.py` — `_sync_closed_ig_positions()` now skips any position whose `opened_at` is within the last 60 seconds, giving IG time to settle before treating absence as closure.
+
+**Also fixed (pre-existing test failures):**
+- `test_default_forex_universe_has_expanded_liquid_pairs` — hardcoded `== 20`, changed to `>= 20` since the pair universe has grown to 47.
+- `test_ig_snapshot_uses_short_cache` — `FakeResponse` was missing `status_code` attribute, added after `_ig_snapshot` gained a `401/403` re-auth check.
+
+### Verification
+
+```
+26 passed (tests/test_forex_lab.py)
+```
+
+### Git commits
+
+| Hash | Message |
+|------|---------|
+| `1da761a` | fix: skip IG close-sync for positions opened within 60s |
+
+### Deploy
+
+```bash
+ssh hey-jimmy "cd ~/flutterai/flutterai && git pull --ff-only origin master && sudo systemctl restart flutterai-backend.service && sleep 3 && curl -s http://localhost:8000/health"
+```
+
+Server confirmed healthy at `1da761a`.
