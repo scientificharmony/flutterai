@@ -960,19 +960,33 @@ class _EntryAlertTile extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.dmSans(color: AppColors.textMuted, fontSize: 12)),
           const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: saving || alert.tracked ? null : onTakeTrade,
-              icon: Icon(alert.tracked ? Icons.check_circle_outline : Icons.add_chart, size: 17),
-              label: Text(alert.tracked ? 'Trade is being tracked' : 'Execute trade'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: alert.tracked ? AppColors.textMuted : color,
-                side: BorderSide(color: (alert.tracked ? AppColors.border : color).withValues(alpha: 0.45)),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          Builder(builder: (context) {
+            final expired = DateTime.now().toUtc().difference(alert.createdAt.toUtc()).inHours >= 2;
+            final blocked = saving || alert.tracked || expired;
+            final label = alert.tracked
+                ? 'Trade is being tracked'
+                : expired
+                    ? 'Setup expired — check current price'
+                    : 'Execute trade';
+            final icon = alert.tracked
+                ? Icons.check_circle_outline
+                : expired
+                    ? Icons.timer_off_outlined
+                    : Icons.add_chart;
+            return SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: blocked ? null : onTakeTrade,
+                icon: Icon(icon, size: 17),
+                label: Text(label),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: blocked ? AppColors.textMuted : color,
+                  side: BorderSide(color: (blocked ? AppColors.border : color).withValues(alpha: 0.45)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
               ),
-            ),
-          ),
+            );
+          }),
             ],
           ),
         ),
@@ -1635,6 +1649,7 @@ class ForexEntryAlert {
   final String rationale;
   final bool tracked;
   final bool declined;
+  final DateTime createdAt;
 
   const ForexEntryAlert({
     required this.id,
@@ -1650,6 +1665,7 @@ class ForexEntryAlert {
     required this.rationale,
     required this.tracked,
     required this.declined,
+    required this.createdAt,
   });
 
   factory ForexEntryAlert.fromJson(Map<String, dynamic> json) => ForexEntryAlert(
@@ -1666,6 +1682,9 @@ class ForexEntryAlert {
         rationale: json['rationale'] as String? ?? '',
         tracked: json['tracked'] as bool? ?? false,
         declined: json['declined'] as bool? ?? false,
+        createdAt: json['created_at'] != null
+            ? DateTime.parse(json['created_at'] as String)
+            : DateTime.now(),
       );
 }
 

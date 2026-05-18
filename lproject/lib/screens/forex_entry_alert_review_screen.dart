@@ -215,30 +215,45 @@ class _AlertBody extends StatelessWidget {
           ),
         ],
         const Spacer(),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: busy ? null : onDecline,
-                child: const Text('Decline'),
+        Builder(builder: (context) {
+          final expired = DateTime.now().toUtc().difference(alert.createdAt.toUtc()).inHours >= 2;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (expired)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(
+                    'Setup expired — alert is over 2 hours old. Check current price before trading.',
+                    style: GoogleFonts.dmSans(color: AppColors.pink, fontSize: 12),
+                  ),
+                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: busy ? null : onDecline,
+                      child: const Text('Decline'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: (busy || alert.declined || expired) ? null : onExecute,
+                      style: FilledButton.styleFrom(backgroundColor: expired ? AppColors.border : color),
+                      child: Text(expired ? 'Expired' : 'Execute trade'),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: FilledButton(
-                onPressed: (busy || alert.declined) ? null : onExecute,
-                style: FilledButton.styleFrom(backgroundColor: color),
-                child: const Text('Execute (IG Demo)'),
+              const SizedBox(height: 10),
+              Text(
+                'If the market moved too far from the alert entry, Hey Jimmy will block execution.',
+                style: GoogleFonts.dmSans(color: AppColors.textMuted, fontSize: 12),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Text(
-          'Fast execution uses the default size (0.5) and the alert stop/target. '
-          'If the market moved too far, Hey Jimmy will block execution.',
-          style: GoogleFonts.dmSans(color: AppColors.textMuted, fontSize: 12),
-        ),
+            ],
+          );
+        }),
       ],
     );
   }
