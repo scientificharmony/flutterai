@@ -254,12 +254,12 @@ class _ForexLabScreenState extends State<ForexLabScreen> with RouteAware {
       if (!mounted) return;
       if (res.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$pair practice trade saved.')),
+          SnackBar(content: Text('$pair trade saved.')),
         );
         await _loadSummary();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not save practice trade (${res.statusCode}).')),
+          SnackBar(content: Text('Could not save trade (${res.statusCode}).')),
         );
       }
     } catch (_) {
@@ -478,7 +478,7 @@ class _ForexLabScreenState extends State<ForexLabScreen> with RouteAware {
       if (!mounted) return;
       if (res.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${position.pair} practice trade closed.')),
+          SnackBar(content: Text('${position.pair} position closed.')),
         );
         await _loadSummary();
       } else {
@@ -557,7 +557,7 @@ class _ForexLabScreenState extends State<ForexLabScreen> with RouteAware {
           const SizedBox(height: 12),
           _ClosedForexPositions(positions: _positions),
           const SizedBox(height: 12),
-          Text('Practice signals',
+          Text('Signals',
               style: GoogleFonts.orbitron(
                   color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
           const SizedBox(height: 10),
@@ -623,13 +623,13 @@ class _StatusPanel extends StatelessWidget {
               const _ForexIcon(),
               const SizedBox(width: 10),
               Expanded(
-                child: Text('Practice CFD mode',
+                child: Text('Forex Lab',
                     style: GoogleFonts.orbitron(
                         color: AppColors.textPrimary,
                         fontSize: 14,
                         fontWeight: FontWeight.w700)),
               ),
-              const _ModeBadge(label: 'DEMO', color: AppColors.cyan),
+              const _ModeBadge(label: 'LIVE', color: AppColors.green),
             ],
           ),
           const SizedBox(height: 14),
@@ -694,7 +694,7 @@ class _RiskControls extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _SliderRow(
-            label: 'Risk per practice trade',
+            label: 'Risk per trade',
             value: riskBps / 100,
             suffix: '%',
             min: 0.25,
@@ -763,14 +763,14 @@ class _ConnectionPanel extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(connected ? '$provider demo connected' : 'No forex broker connected',
+                Text(connected ? '$provider connected' : 'No forex broker connected',
                     style: GoogleFonts.dmSans(
                         color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 2),
                 Text(
                     connected
-                        ? 'Forex Lab is still practice-only until live trading is explicitly enabled.'
-                        : 'Mock signals are shown until an IG demo connector is configured.',
+                        ? 'Live IG account connected. Trades execute on real account.'
+                        : 'Mock signals are shown until an IG connector is configured.',
                     style: GoogleFonts.dmSans(color: AppColors.textMuted, fontSize: 12)),
               ],
             ),
@@ -860,7 +860,7 @@ class _SignalTile extends StatelessWidget {
               child: OutlinedButton.icon(
                 onPressed: saving ? null : onTakeTrade,
                 icon: const Icon(Icons.add_chart, size: 17),
-                label: const Text('I took this practice trade'),
+                label: const Text('I took this trade'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: color,
                   side: BorderSide(color: color.withValues(alpha: 0.45)),
@@ -947,7 +947,7 @@ class _EntryAlertTile extends StatelessWidget {
             child: OutlinedButton.icon(
               onPressed: saving || alert.tracked ? null : onTakeTrade,
               icon: Icon(alert.tracked ? Icons.check_circle_outline : Icons.add_chart, size: 17),
-              label: Text(alert.tracked ? 'Practice trade is being tracked' : 'Proceed with demo trade'),
+              label: Text(alert.tracked ? 'Trade is being tracked' : 'Execute trade'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: alert.tracked ? AppColors.textMuted : color,
                 side: BorderSide(color: (alert.tracked ? AppColors.border : color).withValues(alpha: 0.45)),
@@ -1013,7 +1013,7 @@ class _OpenForexPositions extends StatelessWidget {
             const Icon(Icons.playlist_add_check, color: AppColors.textMuted, size: 20),
             const SizedBox(width: 10),
             Expanded(
-              child: Text('No open forex practice trades',
+              child: Text('No open forex positions',
                   style: GoogleFonts.dmSans(color: AppColors.textMuted, fontSize: 12)),
             ),
           ],
@@ -1024,7 +1024,7 @@ class _OpenForexPositions extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Open practice trades',
+        Text('Open positions',
             style: GoogleFonts.orbitron(
                 color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
         const SizedBox(height: 10),

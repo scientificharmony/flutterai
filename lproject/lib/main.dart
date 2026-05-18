@@ -106,7 +106,7 @@ class _AITradingAppState extends State<AITradingApp> {
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
       navigatorObservers: [routeObserver],
-      home: const HomeScreen(),
+      home: const ForexLabScreen(),
     );
   }
 }
